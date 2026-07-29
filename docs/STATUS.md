@@ -7,10 +7,10 @@
 ---
 
 **Last updated:** 2026-07-29
-**Updated by:** Claude (imported and implemented the Forge design system)
-**Current phase:** Phase 1 — MVP frontend, demo mode (no backend)
-**Repo state:** Scaffold + core form engine + 14 screens on one design system
-**Build health:** ✅ `tsc --noEmit` clean · `vite build` clean · 13 routes walked in-browser with zero console errors
+**Updated by:** Claude (live Firebase backend on branch feat/firebase-backend)
+**Current phase:** Phase 1 — MVP frontend on a live read-only backend
+**Repo state:** 14 screens reading live Firestore (project forge-4d40a, org_demo seeded)
+**Build health:** typecheck + build clean · 13 routes walked cold with 0 console errors · rules 17/17 live checks pass
 
 ---
 
@@ -178,3 +178,38 @@ When you finish a unit of work, edit **this file only** as follows:
 Do **not** paste diffs, file lists, or narrative history here. Git holds that.
 This file answers exactly one question: *"What should I do next, and what will
 bite me?"*
+
+---
+
+## 8. Backend status (branch `feat/firebase-backend`)
+
+**Live.** Firebase project `forge-4d40a`. Firestore seeded with `org_demo`
+(108 documents). Rules and indexes deployed. All 14 screens read live data;
+`src/mock/data.ts` is now only the seed source, not a runtime dependency.
+
+**Verified against the live project, not reasoned about:**
+
+| Check | Result |
+|---|---|
+| Reads the demo needs, signed out | 8/8 allowed |
+| Writes that must never happen | 6/6 denied |
+| Cross-tenant isolation | 3/3 denied |
+| Routes walked cold | 13, zero console errors |
+| Read cost per viewer | **2** (vs 95 per-collection) |
+
+**Read cost is the load-bearing number.** A full walkthrough querying each
+collection costs 95 document reads; at 700 viewers that is 66,500 against a
+50,000/day free quota — the demo dies partway through. Two pre-joined snapshot
+documents bring it to 2 reads/viewer, 1,400 for 700 people, 2.8% of quota, with
+headroom for ~25,000 viewers/day. See `src/core/firebase/snapshot.ts`.
+
+**Still not built** — the full list is in [DEPLOY.md](../DEPLOY.md#what-is-not-built):
+no Cloud Functions (so `counters`, `user.stats` and leaderboard pages are seeded,
+not maintained); the app reads but does not write; no Drive uploads; the judge
+queue is not assignment-driven; **rules have no emulator test suite** — the 17
+live checks are a probe, not the suite DATA_MODEL.md §6 requires.
+
+**Two things to undo before real customers:**
+1. ADR-016 — delete `isDemoOrg` / `demoReadable` from `firestore.rules`.
+2. Rotate the service-account key used to seed; one was exposed in a chat
+   transcript on 2026-07-29 and must be deleted in the Firebase console.
