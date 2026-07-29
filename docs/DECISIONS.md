@@ -342,29 +342,32 @@ future nav change.
 
 **Context.** The Vercel demo must show admin, judging and control-room screens to
 a visitor with no account, and must survive ~700 concurrent viewers. Those reads
-are gated behind org membership by DATA_MODEL.md §6, correctly — CLAUDE.md hard
-rule 3 says the client is never the authority.
+are gated behind org membership by [DATA_MODEL.md §6](DATA_MODEL.md), correctly —
+CLAUDE.md hard rule 3 says the client is never the authority.
 
 The first attempt used anonymous sign-in plus a self-issued read-only membership.
 Two things killed it: enabling Identity Platform programmatically requires
-billing, and 700 viewers would mint 700 throwaway accounts for no benefit.
+billing on the project, and 700 viewers would mint 700 throwaway anonymous
+accounts for no benefit.
 
-**Decision.** The single organization named by  is readable
-without authentication.  carries one predicate,
-, which appears **only in read rules and never in a write
+**Decision.** The single organization named by `VITE_DEMO_ORG_ID` is readable
+without authentication. `firestore.rules` carries one predicate,
+`demoReadable(orgId)`, which appears **only in read rules and never in a write
 rule**. Sign-in still exists and still names the user in the shell, but nothing
-depends on it. The demo profile travels inside the index snapshot so participant
-screens need no auth-gated  read.
+depends on it. The demo profile travels inside the index snapshot, so participant
+screens need no auth-gated `users/{uid}` read.
 
 **Consequences.**
-* Anyone with the project id can read the demo org. That org contains fixture
-  data seeded from  and nothing else.
-* Every write path is still permission-gated, and every other organization is
-  still fully isolated. Verified live against : 17/17 checks pass,
-  including three cross-tenant isolation cases.
-* **Before real customer data exists in any organization, delete   and  from  and redeploy.** That single edit
-  restores membership-gated reads everywhere.
 
-**Rejected.** Relaxing  globally — that makes every org readable by
+* Anyone who knows the project id can read the demo org. That org contains
+  fixture data seeded from `src/mock/data.ts` and nothing else.
+* Every write path is still permission-gated, and every other organization is
+  still fully isolated. Verified live against `forge-4d40a`: 17/17 checks pass
+  while signed out, including three cross-tenant isolation cases.
+* **Before real customer data exists in any organization, delete `isDemoOrg` and
+  `demoReadable` from `firestore.rules` and redeploy.** That one edit restores
+  membership-gated reads everywhere.
+
+**Rejected.** Relaxing `isMember()` globally — that makes every org readable by
 anyone signed in, which is exactly the tenant leak hard rule 2 exists to prevent,
-and it is not reversible by deleting one function.
+and it would not have been reversible by deleting one function.
