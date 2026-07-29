@@ -10,6 +10,7 @@ import {
   Stack, Box, Typography, Chip, Button, IconButton, Select, OutlinedInput,
 } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
+import { DriveLinkInput } from '@shared/ui/DriveLinkInput';
 import { c as t, radius, ease } from '@shared/design/tokens';
 import type { FieldType, FormField, FileRef } from '@core/forms/types';
 
@@ -336,3 +337,234 @@ register('files', (p) => {
     </Box>
   );
 });
+
+/* ================================================================== *
+ * Phase 2 field types                                                 *
+ *                                                                     *
+ * One entry each, matching the pure half in core/forms/registry.ts.   *
+ * Nothing else in the app changes: the renderer never switches on     *
+ * `field.type` — that is the whole point of the registry (ADR-012).   *
+ * ================================================================== */
+
+register('phone', (p) => (
+  <TextField
+    {...common(p)}
+    type="tel"
+    value={(p.value as string) ?? ''}
+    onChange={(e) => p.onChange(e.target.value)}
+    InputProps={{ startAdornment: <Box sx={{ mr: 1, color: t.primaryIcon }}><Icon name="call" size={18} /></Box> }}
+  />
+));
+
+register('time', (p) => (
+  <TextField
+    {...common(p)}
+    type="time"
+    InputLabelProps={{ shrink: true }}
+    value={(p.value as string) ?? ''}
+    onChange={(e) => p.onChange(e.target.value)}
+  />
+));
+
+register('datetime', (p) => (
+  <TextField
+    {...common(p)}
+    type="datetime-local"
+    InputLabelProps={{ shrink: true }}
+    value={(p.value as string) ?? ''}
+    onChange={(e) => p.onChange(e.target.value)}
+  />
+));
+
+register('currency', (p) => (
+  <TextField
+    {...common(p)}
+    type="number"
+    value={(p.value as number | string) ?? ''}
+    onChange={(e) => p.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+    InputProps={{
+      startAdornment: (
+        <Box sx={{ mr: 1, color: t.inkMuted, fontSize: 14, fontWeight: 600 }}>
+          {(p.field.config.currency as string) ?? 'INR'}
+        </Box>
+      ),
+    }}
+  />
+));
+
+register('address', (p) => (
+  <TextField
+    {...common(p)}
+    multiline
+    rows={(p.field.config.rows as number) ?? 3}
+    value={(p.value as string) ?? ''}
+    onChange={(e) => p.onChange(e.target.value)}
+  />
+));
+
+register('videoUrl', (p) => (
+  <TextField
+    {...common(p)}
+    value={(p.value as string) ?? ''}
+    onChange={(e) => p.onChange(e.target.value)}
+    InputProps={{ startAdornment: <Box sx={{ mr: 1, color: t.primaryIcon }}><Icon name="movie" size={18} /></Box> }}
+  />
+));
+
+register('slider', (p) => {
+  const min = p.field.validation.min ?? (p.field.config.min as number) ?? 0;
+  const max = p.field.validation.max ?? (p.field.config.max as number) ?? 100;
+  const step = (p.field.config.step as number) ?? 1;
+  const value = typeof p.value === 'number' ? p.value : min;
+  return (
+    <Box>
+      <FieldLabel field={p.field} />
+      <Stack direction="row" alignItems="center" spacing={2} sx={{ px: 1 }}>
+        <Box component="span" sx={{ fontSize: 12, color: t.inkFaint }}>{min}</Box>
+        <Box
+          component="input"
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          aria-label={p.field.label}
+          onChange={(e) => p.onChange(Number((e.target as HTMLInputElement).value))}
+          sx={{ flex: 1 }}
+        />
+        <Box component="span" sx={{ fontSize: 12, color: t.inkFaint }}>{max}</Box>
+        <Box sx={{ minWidth: 44, textAlign: 'right', fontWeight: 700, fontSize: 15 }}>{value}</Box>
+      </Stack>
+      <FieldFoot error={p.error} help={p.field.help} />
+    </Box>
+  );
+});
+
+register('linearScale', (p) => {
+  const min = (p.field.config.min as number) ?? 1;
+  const max = (p.field.config.max as number) ?? 5;
+  const points = Array.from({ length: Math.max(0, max - min + 1) }, (_, i) => min + i);
+  return (
+    <Box>
+      <FieldLabel field={p.field} />
+      <Stack direction="row" alignItems="flex-end" spacing={1} sx={{ mt: 0.5 }}>
+        <Box sx={{ fontSize: 12, color: t.inkMuted, maxWidth: 96, lineHeight: 1.35, pb: 1 }}>
+          {(p.field.config.minLabel as string) ?? ''}
+        </Box>
+        <Stack direction="row" spacing={0.75} sx={{ flex: 1, justifyContent: 'center' }}>
+          {points.map((n) => {
+            const selected = p.value === n;
+            return (
+              <Box
+                key={n}
+                component="button"
+                type="button"
+                aria-label={String(n)}
+                aria-pressed={selected}
+                onClick={() => p.onChange(n)}
+                sx={{
+                  width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', font: 'inherit',
+                  fontSize: 15, fontWeight: 700,
+                  border: `1px solid ${selected ? 'transparent' : t.outline}`,
+                  background: selected ? t.primary : t.surfaceCard,
+                  color: selected ? t.onPrimary : t.inkMuted,
+                  transition: `background 160ms ${ease}`,
+                  '&:hover': { background: selected ? t.primary : t.surfaceRowHover },
+                }}
+              >
+                {n}
+              </Box>
+            );
+          })}
+        </Stack>
+        <Box sx={{ fontSize: 12, color: t.inkMuted, maxWidth: 96, textAlign: 'right', lineHeight: 1.35, pb: 1 }}>
+          {(p.field.config.maxLabel as string) ?? ''}
+        </Box>
+      </Stack>
+      <FieldFoot error={p.error} help={p.field.help} />
+    </Box>
+  );
+});
+
+register('ranking', (p) => {
+  const options = p.field.options ?? [];
+  // Unranked options are appended rather than hidden, so the control always
+  // shows every option and the participant reorders instead of hunting for
+  // which ones they have not placed yet.
+  const current = (p.value as string[]) ?? [];
+  const ordered = [
+    ...current.filter((v) => options.some((o) => o.value === v)),
+    ...options.map((o) => o.value).filter((v) => !current.includes(v)),
+  ];
+
+  const move = (index: number, delta: number) => {
+    const next = [...ordered];
+    const target = index + delta;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    p.onChange(next);
+  };
+
+  return (
+    <Box>
+      <FieldLabel field={p.field} />
+      <Stack spacing={1}>
+        {ordered.map((value, i) => {
+          const option = options.find((o) => o.value === value);
+          return (
+            <Stack
+              key={value}
+              direction="row"
+              alignItems="center"
+              spacing={1.5}
+              sx={{ p: 1.25, borderRadius: `${radius.field}px`, background: t.surfaceField }}
+            >
+              <Box
+                sx={{
+                  width: 26, height: 26, flex: 'none', borderRadius: '50%',
+                  background: t.inverse, color: t.primary,
+                  display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700,
+                }}
+              >
+                {i + 1}
+              </Box>
+              <Box sx={{ flex: 1, fontSize: 14 }}>{option?.label ?? value}</Box>
+              <IconButton
+                size="small"
+                aria-label={`Move ${option?.label ?? value} up`}
+                disabled={i === 0}
+                onClick={() => move(i, -1)}
+              >
+                <Icon name="arrow_upward" size={16} />
+              </IconButton>
+              <IconButton
+                size="small"
+                aria-label={`Move ${option?.label ?? value} down`}
+                disabled={i === ordered.length - 1}
+                onClick={() => move(i, 1)}
+              >
+                <Icon name="arrow_downward" size={16} />
+              </IconButton>
+            </Stack>
+          );
+        })}
+      </Stack>
+      <FieldFoot error={p.error} help={p.field.help} />
+    </Box>
+  );
+});
+
+register('driveLink', (p) => (
+  <Box>
+    <FieldLabel field={p.field} />
+    {/* The real parser, so a participant gets the same precise diagnosis an
+        organiser gets when setting a cover image (ADR-017). */}
+    <DriveLinkInput
+      value={(p.value as string) ?? ''}
+      onChange={p.onChange}
+      purpose="attachment"
+      placeholder={p.field.placeholder ?? 'Paste a Google Drive share link'}
+    />
+    <FieldFoot error={p.error} help={p.field.help} />
+  </Box>
+));

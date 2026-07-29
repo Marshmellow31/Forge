@@ -11,7 +11,7 @@
 **Current phase:** **Phase 1 complete**, Phase 2 in progress (workflow engine + CSV export done)
 **Repo state:** 15 screens on live Firestore (project forge-4d40a, org_demo seeded); the app now **writes**
 **Build health:** typecheck clean · lint clean (0 errors, 0 warnings) ·
-**314 unit tests + 65 security-rules tests, all passing** · production build
+**345 unit tests + 65 security-rules tests, all passing** · production build
 clean, service worker generated · **22 routes walked in a real browser with 0
 console errors** · no route renders `NotBuiltYet` any more
 **Rules + indexes are DEPLOYED to `forge-4d40a`** (2026-07-29) and reads were
@@ -235,8 +235,18 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
       `WorkflowDefinition` document: a definition that is not the thing being
       executed is a second source of truth, and its first bug is a challenge
       running a workflow its designer does not show.
+- [x] **Ten more field types** — 14 → **24**. phone, time, datetime, currency,
+      slider, linearScale, ranking, driveLink, videoUrl, address. Purely
+      additive: one entry in `core/forms/registry.ts` and one in
+      `modules/forms/fieldComponents.tsx` each, and nothing else in the app
+      changed — no code switches on `field.type` (ADR-012).
+      `driveLink` is a first-class Drive field using the real parser, so a
+      participant gets the same diagnosis an organiser gets on a cover image.
+      `ranking` requires every option exactly once: a partial ranking is
+      ambiguous — is an omitted item last, or unranked? — and cannot be scored
+      honestly.
 - [ ] Teams · community voting · blind judging end-to-end · QR check-in ·
-      custom roles · challenge templates · public org pages · remaining field types
+      custom roles · challenge templates · public org pages
 
 ### Phase 3
 Several items **cannot** be built on Spark — webhooks, a public REST API,

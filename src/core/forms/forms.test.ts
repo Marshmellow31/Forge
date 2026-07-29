@@ -177,8 +177,15 @@ describe('no ghost data', () => {
 describe('registry integrity', () => {
   const types = listFieldTypes();
 
-  it('registers all 14 documented field types', () => {
-    expect(types).toHaveLength(14);
+  it('registers every documented field type', () => {
+    // 14 from Phase 1, 10 added in Phase 2. This number is deliberately
+    // asserted: adding a type to the registry without a UI component would
+    // otherwise only fail at runtime, on the one screen that renders it.
+    expect(types).toHaveLength(24);
+  });
+
+  it('has no duplicate type keys', () => {
+    expect(new Set(types.map((t) => t.type)).size).toBe(types.length);
   });
 
   it.each(types.map((t) => t.type))('%s builds a usable Zod validator', (type: FieldType) => {
@@ -217,6 +224,15 @@ describe('registry integrity', () => {
       ['rating', 4],
       ['url', 'https://example.com'],
       ['githubRepo', 'https://github.com/anthropics/claude-code'],
+      ['phone', '+91 99999 11111'],
+      ['time', '14:30'],
+      ['datetime', '2026-07-29T14:30'],
+      ['currency', 2500],
+      ['slider', 50],
+      ['linearScale', 4],
+      ['videoUrl', 'https://youtu.be/dQw4w9WgXcQ'],
+      ['address', '12 Some Street, Vadodara 390001'],
+      ['driveLink', 'https://drive.google.com/file/d/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUv/view'],
     ];
     for (const [type, value] of cases) {
       const def = getFieldType(type);
@@ -232,12 +248,77 @@ describe('registry integrity', () => {
       ['githubRepo', 'https://gitlab.com/a/b'],
       ['number', 'not a number'],
       ['multiSelect', 'one'],
+      ['phone', 'call me'],
+      ['time', '25:99'],
+      ['datetime', '2026-07-29'],
+      ['currency', -5],
+      ['linearScale', 99],
+      ['videoUrl', 'https://example.com/video.mp4'],
+      ['driveLink', 'https://dropbox.com/s/abc'],
+      ['address', 'x'],
     ];
     for (const [type, value] of cases) {
       const def = getFieldType(type);
       const result = def.buildValidator(field({ type, key: `k_${type}` })).safeParse(value);
       expect(result.success, `${type} accepted ${JSON.stringify(value)}`).toBe(false);
     }
+  });
+
+  describe('ranking', () => {
+    const rankingField = field({
+      type: 'ranking',
+      key: 'rank',
+      options: [
+        { id: 'o1', label: 'One', value: 'one' },
+        { id: 'o2', label: 'Two', value: 'two' },
+        { id: 'o3', label: 'Three', value: 'three' },
+      ],
+    });
+    const validator = getFieldType('ranking').buildValidator(rankingField);
+
+    it('accepts a complete ranking', () => {
+      expect(validator.safeParse(['two', 'one', 'three']).success).toBe(true);
+    });
+
+    // A partial ranking is ambiguous: is an omitted item last, or unranked?
+    it('rejects a partial ranking', () => {
+      expect(validator.safeParse(['one', 'two']).success).toBe(false);
+    });
+
+    it('rejects a duplicated option', () => {
+      expect(validator.safeParse(['one', 'one', 'two']).success).toBe(false);
+    });
+
+    it('rejects an option that is not on the list', () => {
+      expect(validator.safeParse(['one', 'two', 'four']).success).toBe(false);
+    });
+
+    it('exports as a numbered list', () => {
+      expect(getFieldType('ranking').toExportValue(['two', 'one']))
+        .toBe('1. two; 2. one');
+    });
+  });
+
+  describe('phone is permissive across countries', () => {
+    const validator = getFieldType('phone').buildValidator(field({ type: 'phone', key: 'p' }));
+
+    it.each([
+      '+91 99999 11111',
+      '+1 (555) 010-9999',
+      '020 7946 0958',
+      '+44-20-7946-0958',
+    ])('accepts %s', (value) => {
+      // A competition that cannot accept a foreign entrant's number has a bug,
+      // not a validation feature.
+      expect(validator.safeParse(value).success).toBe(true);
+    });
+  });
+
+  describe('address export', () => {
+    it('flattens newlines so a spreadsheet row stays readable', () => {
+      expect(getFieldType('address').toExportValue('12 Some Street\nVadodara\n390001'))
+        .toBe('12 Some Street, Vadodara, 390001');
+    });
   });
 });
 
