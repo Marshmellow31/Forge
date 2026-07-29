@@ -100,6 +100,19 @@ VITE_USE_EMULATOR=false
 If any variable is missing the app renders a "Configuration error" page naming
 it, rather than a blank screen.
 
+`vercel.json` already handles the rest, and two of its rules are load-bearing:
+
+* **`/assets/*` is cached for a year, `immutable`.** Filenames are content
+  hashed, so they can never go stale. This is where most repeat-visit latency
+  goes.
+* **`sw.js` is `max-age=0, must-revalidate`.** The service worker is *not*
+  content-hashed, so a cached copy pins every returning visitor to the build
+  that installed it — they would stop receiving updates permanently and no
+  redeploy could reach them. Same for `manifest.webmanifest` and `index.html`.
+
+Icons are committed under `public/`, so the build needs no extra step.
+Regenerate them with `npm run icons` if the brand colours change.
+
 ## 5. Authorize the Vercel domain
 
 **Firebase console → Authentication → Settings → Authorized domains → Add
