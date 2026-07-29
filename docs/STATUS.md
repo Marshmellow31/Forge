@@ -335,15 +335,16 @@ line as unverified until it has executed once against a real project.
 | `onScoreWrite` | Stale leaderboards (SPEC_SCORING §4). **This is the function that makes ranks move.** |
 | `dispatchWebhook` | Phase 3 signed webhooks |
 
-**Before deploying, two things:**
-1. `onScoreWrite` duplicates the aggregation in `core/judging/aggregate.ts`
-   because a Functions package cannot reach into `src/`. If the two disagree, a
-   participant sees one number and the board shows another. Extract
-   `core/judging` into a shared workspace package, or add a test that runs both
-   over one fixture.
-2. **Tighten the rules back.** `leaderboard` and `certificates` return to
-   `write: if false`, and the challenge rule drops its `counters` hatch. Those
-   relaxations exist only because there was no server.
+**The duplication hazard is closed.** `onScoreWrite` imports the app's own
+`core/judging/aggregate.ts` rather than reimplementing it — that file has no
+imports of its own, so the Functions `tsconfig` reaches up and compiles the real
+thing. The 32 judging tests therefore cover the Cloud Function too. Verified:
+`cd functions && npx tsc` compiles clean and `main` resolves.
+
+**Still to do before deploying:** tighten the rules back. `leaderboard` and
+`certificates` return to `write: if false`, and the challenge rule drops its
+`counters` hatch. Those relaxations exist only because there was no server;
+leaving them once there is one would be the worst of both.
 
 **All four pure engines named in CLAUDE.md hard rule 8 now exist and are tested:**
 `core/forms` (86) · `core/workflow` (49) · `core/rbac` (44) · `core/judging` (32).

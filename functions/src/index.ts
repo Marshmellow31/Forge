@@ -31,6 +31,12 @@ import { setGlobalOptions } from 'firebase-functions/v2';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { createHmac } from 'node:crypto';
+// The app's own pure engine, compiled into this bundle rather than duplicated.
+// It has no imports of its own, which is what makes that possible.
+import {
+  aggregateSubmission, rankCohort, paginate,
+  type CriterionWeight, type ReviewInput,
+} from '../../src/core/judging/aggregate';
 
 initializeApp();
 const db = getFirestore();
@@ -82,13 +88,6 @@ export const onSubmissionWrite = onDocumentWritten(
  * Leaderboard materialization — SPEC_SCORING §4                       *
  * ================================================================== */
 
-interface ReviewDoc {
-  submissionId: string;
-  judgeId: string;
-  recused?: boolean;
-  criteriaScores: Array<{ criterionId: string; score: number }>;
-}
-
 /**
  * Rebuilds the leaderboard when a score lands.
  *
@@ -96,13 +95,13 @@ interface ReviewDoc {
  * are whatever the seed wrote, which is why STATUS lists stale leaderboards as
  * a known risk on Spark.
  *
- * The aggregation deliberately mirrors `src/core/judging/aggregate.ts` rather
- * than importing it — a Functions package cannot reach into the app's `src/`
- * without a build step that would couple their deploy cycles. **That
- * duplication is a real hazard**: if the client's rounding and this disagree, a
- * participant sees one number and the board shows another. Before deploying,
- * either extract `core/judging` into a shared workspace package or add a test
- * that runs both over the same fixture and asserts they match.
+ * It imports **the app's own aggregation engine** rather than reimplementing
+ * it. An earlier draft duplicated the arithmetic here, which is a genuine
+ * correctness hazard: the moment the two roundings disagree, a participant sees
+ * one score on their entry and a different one on the board, and neither is
+ * obviously wrong. `core/judging/aggregate.ts` has no imports at all, so this
+ * package compiles the real file (see `tsconfig.json` `rootDir`) and the 32
+ * tests that cover it now cover this function too.
  */
 export const onScoreWrite = onDocumentWritten(
   'organizations/{orgId}/challenges/{cid}/scores/{scoreId}',
@@ -110,80 +109,69 @@ export const onScoreWrite = onDocumentWritten(
     const { orgId, cid } = event.params;
     const base = `organizations/${orgId}/challenges/${cid}`;
 
-    const [rubricSnap, reviewsSnap, regsSnap] = await Promise.all([
+    const [rubricSnap, reviewsSnap, regsSnap, subsSnap] = await Promise.all([
       db.collection(`${base}/rubric`).get(),
       db.collection(`${base}/reviews`).get(),
       db.collection(`${base}/registrations`).get(),
+      db.collection(`${base}/submissions`).get(),
     ]);
 
-    const criteria = rubricSnap.docs.map((d) => ({
+    const criteria: CriterionWeight[] = rubricSnap.docs.map((d) => ({
       id: d.id,
       weight: Number(d.data().weight ?? 0),
       max: Number(d.data().max ?? 10),
     }));
 
-    // submissionId -> weighted totals, one per judge.
-    const totals = new Map<string, number[]>();
-    for (const doc of reviewsSnap.docs) {
-      const review = doc.data() as ReviewDoc;
-      if (review.recused) continue;
-
-      let earned = 0;
-      let available = 0;
-      for (const entry of review.criteriaScores ?? []) {
-        const criterion = criteria.find((c) => c.id === entry.criterionId);
-        if (!criterion || criterion.max <= 0) continue;
-        const clamped = Math.max(0, Math.min(entry.score, criterion.max));
-        earned += (clamped / criterion.max) * criterion.weight;
-        available += criterion.weight;
-      }
-      if (available === 0) continue;
-
-      const list = totals.get(review.submissionId) ?? [];
-      list.push((earned / available) * 100);
-      totals.set(review.submissionId, list);
-    }
-
-    const nameFor = new Map(
-      regsSnap.docs.map((d) => [d.id, String(d.data().name ?? 'Entrant')]),
-    );
-
-    const rows = [...totals.entries()]
-      .map(([submissionId, scores]) => ({
-        submissionId,
-        score: Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10,
-        reviewsDone: scores.length,
-      }))
-      .sort((a, b) => b.score - a.score || a.submissionId.localeCompare(b.submissionId));
-
-    // Competition ranking: ties share a place and consume the ones below.
-    let lastScore: number | undefined;
-    let lastRank = 0;
-    const ranked = rows.map((row, index) => {
-      const rank = lastScore === row.score ? lastRank : index + 1;
-      lastScore = row.score;
-      lastRank = rank;
-      return { ...row, rank };
+    const reviews: ReviewInput[] = reviewsSnap.docs.map((d) => {
+      const r = d.data();
+      return {
+        submissionId: String(r.submissionId ?? ''),
+        judgeId: String(r.judgeId ?? ''),
+        recused: Boolean(r.recused),
+        criteriaScores: (r.criteriaScores ?? []) as ReviewInput['criteriaScores'],
+      };
     });
 
-    // 50 rows per page — Firestore caps a document at 1 MiB.
+    // How many reviews a submission is *expected* to get decides whether its
+    // score is provisional. A missing review is never a zero (SPEC_SCORING §8),
+    // and the engine encodes that — which is exactly why it is shared.
+    const expected = new Map(
+      subsSnap.docs.map((d) => [d.id, Number(d.data().reviewsTotal ?? 1) || 1]),
+    );
+
+    const aggregates = subsSnap.docs.map((d) =>
+      aggregateSubmission(d.id, reviews, criteria, { reviewsRequired: expected.get(d.id) ?? 1 }),
+    );
+    const ranked = rankCohort(aggregates);
+
+    const nameFor = new Map(regsSnap.docs.map((d) => [d.id, String(d.data().name ?? 'Entrant')]));
+    const registrationFor = new Map(
+      subsSnap.docs.map((d) => [d.id, String(d.data().registrationId ?? d.id)]),
+    );
+
     const batch = db.batch();
-    for (let page = 0; page * 50 < Math.max(ranked.length, 1); page += 1) {
+    for (const [page, rows] of paginate(ranked).entries()) {
       batch.set(db.doc(`${base}/leaderboard/page_${page}`), {
         page,
         groupKey: null,
-        entries: ranked.slice(page * 50, page * 50 + 50).map((r) => ({
-          rank: r.rank,
-          registrationId: r.submissionId,
-          userId: r.submissionId,
-          displayName: nameFor.get(r.submissionId) ?? 'Entrant',
-          avatarColor: '#4f46e5',
-          score: r.score,
-          change: 0,
-          isProvisional: false,
-          reviewsDone: r.reviewsDone,
-          reviewsTotal: r.reviewsDone,
-        })),
+        entries: rows.map((r) => {
+          const registrationId = registrationFor.get(r.submissionId) ?? r.submissionId;
+          return {
+            rank: r.rank,
+            registrationId,
+            userId: registrationId,
+            displayName: nameFor.get(registrationId) ?? 'Entrant',
+            avatarColor: '#4f46e5',
+            // A null score means "not scored". It is stored as 0 only because
+            // the leaderboard shape requires a number; `isProvisional` is what
+            // readers must branch on, never the 0 itself.
+            score: r.score ?? 0,
+            change: 0,
+            isProvisional: r.isProvisional,
+            reviewsDone: r.reviewsDone,
+            reviewsTotal: r.reviewsTotal,
+          };
+        }),
         computedAt: FieldValue.serverTimestamp(),
         strategyId: 'average',
         schemaVersion: 1,

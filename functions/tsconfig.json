@@ -4,7 +4,11 @@
     "target": "ES2022",
     "lib": ["ES2022"],
     "outDir": "lib",
-    "rootDir": "src",
+    // `rootDir` reaches one level up so the app's pure judging engine compiles
+    // into this bundle rather than being copied into it. See the note in
+    // src/index.ts: a duplicated aggregation is a correctness hazard, because a
+    // participant would see one score while the leaderboard showed another.
+    "rootDir": "..",
     "strict": true,
     "noImplicitReturns": true,
     "noUnusedLocals": true,
@@ -13,5 +17,6 @@
     "moduleResolution": "node",
     "sourceMap": true
   },
-  "include": ["src"]
+  "include": ["src", "../src/core/judging/aggregate.ts"],
+  "exclude": ["../src/core/judging/*.test.ts"]
 }

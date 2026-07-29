@@ -2,7 +2,8 @@
   "name": "forge-functions",
   "private": true,
   "description": "Cloud Functions for Forge. NOT DEPLOYED — requires the Blaze plan.",
-  "main": "lib/index.js",
+  "$comment": "`main` points into lib/functions/ because tsconfig's rootDir reaches up to the repo root, so the app's pure judging engine compiles in alongside these functions rather than being duplicated.",
+  "main": "lib/functions/src/index.js",
   "engines": { "node": "22" },
   "scripts": {
     "build": "tsc",
