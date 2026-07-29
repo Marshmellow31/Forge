@@ -3,7 +3,7 @@ import { Box, Stack, Typography, useMediaQuery } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { Icon } from '@shared/ui/Icon';
 import { c, radius, shadow, ease } from '@app/tokens';
-import { useOrg } from '@core/firebase/hooks';
+import { useOrg, useCurrentUser } from '@core/firebase/hooks';
 import { useAuth } from '@app/providers/AppProviders';
 
 /**
@@ -82,7 +82,8 @@ export default function AppShell() {
   const screenTitle = SCREEN_TITLES.find((s) => s.test(pathname))?.title ?? 'Forge';
   const { user } = useAuth();
   const { data: org } = useOrg();
-  const displayName = user?.displayName ?? 'Demo Guest';
+  const { data: profile } = useCurrentUser(user?.uid ?? 'u_self');
+  const displayName = user?.displayName ?? profile?.name ?? 'Demo viewer';
   const initials = displayName.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
 
   const showFab = !isDesktop && ['/home', '/discover', '/me/registrations'].includes(pathname);
@@ -195,7 +196,7 @@ export default function AppShell() {
             <Box sx={{ minWidth: 0, flex: 1 }}>
               <Typography noWrap sx={{ fontSize: 14, fontWeight: 600 }}>{displayName}</Typography>
               <Typography sx={{ fontSize: 12, color: c.inkMuted }}>
-                {org?.name ?? 'Loading…'}
+                {profile ? `${profile.points.toLocaleString()} pts · ` : ''}{org?.name ?? ''}
               </Typography>
             </Box>
             <Icon name="unfold_more" size={20} color={c.inkMuted} />

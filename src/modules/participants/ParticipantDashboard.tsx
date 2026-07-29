@@ -8,6 +8,9 @@ import { ChallengeCard, StageStepper } from '@modules/challenges/components';
 import { c, radius, ease } from '@app/tokens';
 import { useChallenges, useBadges, useCertificates, useCurrentUser } from '@core/firebase/hooks';
 import { useAuth } from '@app/providers/AppProviders';
+
+/** The profile seeded into the index snapshot for the signed-out demo. */
+const DEMO_USER_ID = 'u_self';
 import { QueryBoundary } from '@shared/ui/QueryBoundary';
 
 const BADGE_ICONS: Record<string, string> = {
@@ -27,8 +30,10 @@ export default function ParticipantDashboard() {
   const { data: challenges = [], isLoading, error } = useChallenges();
   const { data: badges = [] } = useBadges();
   const { data: certificates = [] } = useCertificates();
-  const { data: profile } = useCurrentUser(user?.uid);
-  const displayName = user?.displayName ?? 'there';
+  // No sign-in on the public demo, so fall back to the seeded demo profile
+  // that travels in the index snapshot. See ADR-016.
+  const { data: profile } = useCurrentUser(user?.uid ?? DEMO_USER_ID);
+  const displayName = user?.displayName ?? profile?.name ?? 'there';
   const stats = profile ?? { points: 0, streakDays: 0, challengesEntered: 0, challengesWon: 0 };
   const active = challenges.filter((ch) => ch.status === 'running' || ch.status === 'judging');
   const open = challenges.filter((ch) => ch.status === 'published').slice(0, 3);

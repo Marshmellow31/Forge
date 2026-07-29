@@ -56,6 +56,28 @@ const base = (createdBy = 'system') => ({
   schemaVersion: 1,
 });
 
+/**
+ * Firestore rejects `undefined` anywhere in a document.
+ *
+ * The per-document writes below build their payloads explicitly, but the
+ * snapshots embed fixture objects wholesale, and optional fields there
+ * (`clientSubmittedAt`, `serverReceivedAt`) are `undefined` on most rows.
+ * Convert to `null` rather than enabling `ignoreUndefinedProperties`, which
+ * would silently drop the key and make a missing value indistinguishable from
+ * a field the seed forgot to write.
+ */
+function nullifyUndefined<T>(value: T): T {
+  if (value === undefined) return null as T;
+  if (Array.isArray(value)) return value.map(nullifyUndefined) as T;
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    if (typeof (value as { toDate?: unknown }).toDate === 'function') return value; // Timestamp
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, nullifyUndefined(v)]),
+    ) as T;
+  }
+  return value;
+}
+
 /** Firestore caps a batch at 500 writes. */
 async function commitAll(ops: Array<[FirebaseFirestore.DocumentReference, unknown]>) {
   for (let i = 0; i < ops.length; i += 400) {
@@ -338,6 +360,10 @@ async function main() {
   const BADGE_EARNED = new Set(badges.filter((b) => b.earned).map((b) => b.id));
 
   const indexSnapshot = {
+    // The demo profile travels in the snapshot so participant screens have a
+    // name and stats without a signed-in user and without reading users/{uid},
+    // which is rightly gated behind auth.
+    profile: currentUser,
     org: {
       id: ORG_ID, name: org.name, slug: org.slug, type: org.type,
       logoColor: org.logoColor, initials: org.initials,
@@ -352,18 +378,18 @@ async function main() {
   };
 
   const snapshotOps: Array<[FirebaseFirestore.DocumentReference, unknown]> = [
-    [orgRef.collection('snapshots').doc('index'), indexSnapshot],
+    [orgRef.collection('snapshots').doc('index'), nullifyUndefined(indexSnapshot)],
   ];
 
   for (const ch of challenges) {
     snapshotOps.push([
       orgRef.collection('snapshots').doc(`challenge_${ch.id}`),
-      {
+      nullifyUndefined({
         registrations: registrations.filter((r) => r.challengeId === ch.id),
         submissions: submissions.filter((s) => s.challengeId === ch.id),
         rubric,
         leaderboard: ch.id === 'ch_monsoon' ? leaderboard : [],
-      },
+      }),
     ]);
   }
 

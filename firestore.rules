@@ -28,25 +28,19 @@ service cloud.firestore {
     }
 
     // ---- Demo scaffolding (ADR-016) --------------------------------------
-    // The public demo lets an unauthenticated visitor sign in as a guest and
-    // read one seeded organization. `isDemoOrg` is deliberately narrow: it
-    // names a single org id, grants READ ONLY, and never appears in a write
-    // rule. Remove this function and its call sites before a second real
-    // tenant exists.
+    // The public demo is READ-ONLY seeded data in ONE named organization, and
+    // is world-readable: no sign-in, so 700 viewers do not mint 700 throwaway
+    // anonymous accounts, and the demo works before Auth is configured.
+    //
+    // This is safe only because it is exactly this narrow:
+    //   * it names a single org id — every other tenant is untouched
+    //   * it appears ONLY in read rules, never in a write rule
+    //   * the data behind it is fixture data, seeded from src/mock/data.ts
+    //
+    // Delete this function and its call sites before real customer data lives
+    // in any organization.
     function isDemoOrg(orgId) { return orgId == 'org_demo'; }
-    function demoReadable(orgId) { return isDemoOrg(orgId) && isSignedIn(); }
-
-    // A guest may self-issue a membership ONLY in the demo org, ONLY with the
-    // demoViewer role, and ONLY with an empty permission set. Any other shape
-    // is rejected, so this cannot be used to mint an admin.
-    function isSelfDemoMembership(orgId, memberId) {
-      return isDemoOrg(orgId)
-        && memberId == uid()
-        && request.resource.data.userId == uid()
-        && request.resource.data.roleIds == ['demoViewer']
-        && request.resource.data.resolvedPermissions.size() == 0
-        && request.resource.data.status == 'active';
-    }
+    function demoReadable(orgId) { return isDemoOrg(orgId); }
     // ----------------------------------------------------------------------
 
     match /users/{userId} {
@@ -83,8 +77,7 @@ service cloud.firestore {
 
       match /members/{memberId} {
         allow read: if isMember(orgId) || demoReadable(orgId);
-        allow create: if hasPerm(orgId, 'member.manage')
-                      || isSelfDemoMembership(orgId, memberId);
+        allow create: if hasPerm(orgId, 'member.manage');
         allow update, delete: if hasPerm(orgId, 'member.manage');
       }
 

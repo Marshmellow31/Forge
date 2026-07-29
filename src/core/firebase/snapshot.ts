@@ -4,7 +4,7 @@ import { db, demoOrgId } from './app';
 import { qk } from './keys';
 import type {
   Org, Workspace, Challenge, Registration, Submission, LeaderboardEntry,
-  Criterion, Member, Badge, Certificate, AuditEntry,
+  Criterion, Member, Badge, Certificate, AuditEntry, CurrentUser,
 } from '@shared/types/domain';
 
 /**
@@ -35,6 +35,8 @@ import type {
  */
 
 export interface IndexSnapshot {
+  /** Demo profile; avoids an auth-gated users/{uid} read. */
+  profile: CurrentUser;
   org: Org;
   workspaces: Workspace[];
   challenges: Challenge[];
@@ -70,6 +72,7 @@ export async function fetchChallengeSnapshot(
  * no further network traffic. Hooks stay unchanged; only their source moves.
  */
 export function hydrateFromIndex(qc: QueryClient, s: IndexSnapshot, orgId = demoOrgId()) {
+  if (s.profile) qc.setQueryData(qk.user(s.profile.id), s.profile);
   qc.setQueryData(qk.org(orgId), s.org);
   qc.setQueryData(qk.workspaces(orgId), s.workspaces);
   qc.setQueryData(qk.challenges(orgId), s.challenges);

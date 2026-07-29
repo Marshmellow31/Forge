@@ -1,9 +1,8 @@
 import { useEffect, useState, createContext, useContext, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { Box, Button, Stack, Typography, CircularProgress } from '@mui/material';
-import { Icon } from '@shared/ui/Icon';
-import { c, radius } from '@app/tokens';
-import { onAuth, signInAsGuest, signInWithGoogle, type AuthUser } from '@core/firebase/auth';
+import { Box, CircularProgress } from '@mui/material';
+import { c } from '@app/tokens';
+import { onAuth, type AuthUser } from '@core/firebase/auth';
 import { fetchIndexSnapshot, hydrateFromIndex } from '@core/firebase/snapshot';
 
 /**
@@ -32,85 +31,25 @@ const AuthContext = createContext<{ user: AuthUser | null }>({ user: null });
 export const useAuth = () => useContext(AuthContext);
 
 /**
- * Blocks the app until Firebase Auth resolves, because every read is
- * rules-gated and an unauthenticated read returns permission-denied rather
- * than an empty list. Showing a sign-in door is honest; showing empty tables
- * would not be.
+ * Optional sign-in.
+ *
+ * The demo reads world-readable seeded data (ADR-016), so this must never
+ * block: 700 viewers should not each mint a throwaway anonymous account, and
+ * the app has to render even when Auth is not configured on the project.
+ *
+ * A signed-in user gets their own name in the shell; everyone else is a
+ * viewer. Auth failures are swallowed deliberately — they are not fatal here.
  */
-function AuthGate({ children }: { children: ReactNode }) {
+function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [ready, setReady] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(
-    () =>
-      onAuth((u) => {
-        setUser(u);
-        setReady(true);
-      }),
-    [],
-  );
-
-  const attempt = async (fn: () => Promise<unknown>) => {
-    setBusy(true);
-    setError(null);
+  useEffect(() => {
     try {
-      await fn();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Sign-in failed.');
-    } finally {
-      setBusy(false);
+      return onAuth(setUser);
+    } catch {
+      return undefined; // Auth not configured; the demo does not need it.
     }
-  };
-
-  if (!ready) {
-    return (
-      <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: c.surface }}>
-        <CircularProgress sx={{ color: c.accent }} />
-      </Box>
-    );
-  }
-
-  if (!user) {
-    return (
-      <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: c.surface, p: 3 }}>
-        <Box sx={{ maxWidth: 420, textAlign: 'center' }}>
-          <Box sx={{ width: 56, height: 56, mx: 'auto', mb: 3, borderRadius: '18px', background: c.inverse, display: 'grid', placeItems: 'center', color: c.primary, fontSize: 28, fontWeight: 800 }}>
-            F
-          </Box>
-          <Typography variant="h1" sx={{ fontSize: 34, mb: 1.5 }}>Forge</Typography>
-          <Typography sx={{ fontSize: 15, color: c.inkMuted, mb: 4 }}>
-            Sign in to view the demo. Guest access is read-only and needs no account.
-          </Typography>
-          <Stack spacing={1.5}>
-            <Button
-              variant="contained"
-              disabled={busy}
-              onClick={() => attempt(signInAsGuest)}
-              sx={{ height: 52 }}
-              startIcon={<Icon name="visibility" size={20} />}
-            >
-              Continue as guest
-            </Button>
-            <Button
-              variant="outlined"
-              disabled={busy}
-              onClick={() => attempt(signInWithGoogle)}
-              sx={{ height: 52 }}
-            >
-              Sign in with Google
-            </Button>
-          </Stack>
-          {error && (
-            <Box sx={{ mt: 3, p: 2, borderRadius: `${radius.field}px`, background: c.errorContainer, color: c.errorBody, fontSize: 13, textAlign: 'left' }}>
-              {error}
-            </Box>
-          )}
-        </Box>
-      </Box>
-    );
-  }
+  }, []);
 
   return <AuthContext.Provider value={{ user }}>{children}</AuthContext.Provider>;
 }
@@ -156,9 +95,9 @@ function SnapshotHydrator({ children }: { children: ReactNode }) {
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthGate>
+      <AuthProvider>
         <SnapshotHydrator>{children}</SnapshotHydrator>
-      </AuthGate>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

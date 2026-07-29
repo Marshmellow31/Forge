@@ -337,33 +337,34 @@ future nav change.
 
 ---
 
-## ADR-016 — Guest sign-in provisions a read-only membership in one demo org
+## ADR-016 — The demo organization is world-readable; the demo does not authenticate
 **Date:** 2026-07-29 · **Status:** Accepted — **demo scaffolding, must be removed**
 
-**Context.** The Vercel demo must show admin, judging and control-room screens
-to someone with no account. Those reads are gated behind org membership by
-DATA_MODEL.md §6, and correctly so — CLAUDE.md hard rule 3 says the client is
-never the authority. Three options existed: weaken the rules globally, ship the
-demo on mock data, or let a guest become a member of exactly one org.
+**Context.** The Vercel demo must show admin, judging and control-room screens to
+a visitor with no account, and must survive ~700 concurrent viewers. Those reads
+are gated behind org membership by DATA_MODEL.md §6, correctly — CLAUDE.md hard
+rule 3 says the client is never the authority.
 
-**Decision.** Firebase Auth anonymous sign-in provisions `users/{uid}` plus a
-membership in `VITE_DEMO_ORG_ID` carrying the `demoViewer` role and an **empty**
-`resolvedPermissions` array. `firestore.rules` contains a narrow
-`isSelfDemoMembership()` predicate that permits this self-issued write only when
-the org id matches the demo org, the member id equals the caller's uid, the role
-list is exactly `['demoViewer']`, and the permission set is empty. `demoReadable()`
-widens **reads only**, never writes.
+The first attempt used anonymous sign-in plus a self-issued read-only membership.
+Two things killed it: enabling Identity Platform programmatically requires
+billing, and 700 viewers would mint 700 throwaway accounts for no benefit.
+
+**Decision.** The single organization named by  is readable
+without authentication.  carries one predicate,
+, which appears **only in read rules and never in a write
+rule**. Sign-in still exists and still names the user in the shell, but nothing
+depends on it. The demo profile travels inside the index snapshot so participant
+screens need no auth-gated  read.
 
 **Consequences.**
-* A guest can read the seeded demo org and nothing else. Every write path still
-  requires a real permission, so the demo cannot be used to mutate data.
-* This is the one place where a client self-issues a membership. It is a
-  privilege-escalation shape, made safe only by how narrow the predicate is —
-  **delete `isDemoOrg`, `demoReadable` and `isSelfDemoMembership` from
-  `firestore.rules`, and the guest button from `AppProviders`, before a second
-  real tenant exists.**
-* Anonymous accounts accumulate in Auth. Harmless for a demo; prune periodically.
+* Anyone with the project id can read the demo org. That org contains fixture
+  data seeded from  and nothing else.
+* Every write path is still permission-gated, and every other organization is
+  still fully isolated. Verified live against : 17/17 checks pass,
+  including three cross-tenant isolation cases.
+* **Before real customer data exists in any organization, delete   and  from  and redeploy.** That single edit
+  restores membership-gated reads everywhere.
 
-**Rejected.** Relaxing `isMember()` globally — that would make every org readable
-by anyone signed in, which is precisely the tenant leak CLAUDE.md hard rule 2
-exists to prevent, and it would not have been reversible by deleting one function.
+**Rejected.** Relaxing  globally — that makes every org readable by
+anyone signed in, which is exactly the tenant leak hard rule 2 exists to prevent,
+and it is not reversible by deleting one function.
