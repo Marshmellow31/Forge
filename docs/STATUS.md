@@ -245,8 +245,33 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
       `ranking` requires every option exactly once: a partial ranking is
       ambiguous — is an omitted item last, or unranked? — and cannot be scored
       honestly.
-- [ ] Teams · community voting · blind judging end-to-end · QR check-in ·
-      custom roles · challenge templates · public org pages
+- [x] **Blind judging, end-to-end.** It was *hardcoded* in the judge screens —
+      a challenge that had never chosen it still told judges names were hidden,
+      while showing them. Now a real per-challenge setting that flows through
+      the queue, the scoring screen and the CSV export (exporting names would
+      otherwise undo it in one click).
+- [x] **Challenge templates** — duplicate any challenge as a draft. Carries the
+      shape, deliberately not the counters, timeline or entrants: a copy should
+      be a blank competition shaped like the original, not a second one claiming
+      184 entrants who never entered.
+- [x] **Team entries** — `teamsEnabled` + `maxTeamSize`; `Registration.team` has
+      existed since day one, so no migration.
+- [x] **S-09 Public organization page** (`/o/:slug`) — shareable, works signed
+      out, shows only public challenges.
+- [ ] Community voting · QR check-in · custom roles
+
+**Architecture fix found while doing this.** `PublicOrgPage` needed
+`ChallengeCard`, which lived in `modules/challenges` — a module importing
+another module. Investigating why lint had not caught it revealed the
+`boundaries/dependencies` same-module selector **silently fails to match**, so
+the policy degraded to "modules → modules, always" and the rule could never
+fire. Confirmed with a deliberate probe.
+
+Replaced with a path rule that is verified to fail, which then surfaced **three
+real pre-existing violations**. Fixed by moving genuinely shared code to
+`shared/ui`: `ChallengeCard`, `StageStepper`, and the form engine's React half
+(`FormRenderer` + `fieldComponents`, which ADR-012 always described as the
+React counterpart to the pure `core/forms`).
 
 ### Phase 3
 Several items **cannot** be built on Spark — webhooks, a public REST API,

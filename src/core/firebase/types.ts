@@ -164,6 +164,10 @@ export interface ChallengeDoc extends BaseDoc {
   };
   leaderboardMode: 'hidden' | 'live' | 'afterClose' | 'topN' | 'public';
   prize: string;
+  /** SPEC_SCORING blind judging. Absent reads as false. */
+  blindJudging?: boolean;
+  teamsEnabled?: boolean;
+  maxTeamSize?: number;
   judgeIds: string[];
   /** Function-maintained in production; seeded here. Client-read-only. */
   counters: {

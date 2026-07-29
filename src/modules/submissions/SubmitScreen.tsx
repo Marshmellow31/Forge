@@ -10,7 +10,7 @@ import { useChallengeBySlug, useFormSchemas, useSubmissions } from '@core/fireba
 import { useSubmitEntry } from '@core/firebase/mutations';
 import { useAuth } from '@core/auth';
 import { NotSignedInError } from '@core/sync';
-import { FormRenderer, useFormEngine } from '@modules/forms/FormRenderer';
+import { FormRenderer, useFormEngine } from '@shared/ui/forms/FormRenderer';
 import { stripHiddenAnswers } from '@core/forms/conditions';
 import { parseDriveLink, driveFileRef } from '@core/drive/links';
 import { EmptyState, Tag, ListSkeleton, containerSx } from '@shared/ui/primitives';

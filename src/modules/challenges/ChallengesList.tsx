@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Box, Button, Stack, Tab, Tabs, Typography } from '@mui/material';
+import { Box, Button, IconButton, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { useChallenges, useWorkspaces } from '@core/firebase/hooks';
+import { useSaveChallenge } from '@core/firebase/mutations';
+import { useAuth, usePermissions } from '@core/auth';
+import { newChallengeId, uniqueSlug } from '@core/challenges/slug';
 import { QueryBoundary } from '@shared/ui/QueryBoundary';
 import { PageTitle, EmptyState, StatusPill, TableHead, tableRowSx, Num } from '@shared/ui/primitives';
 import { CoverImage } from '@shared/ui/CoverImage';
@@ -17,6 +20,56 @@ export default function ChallengesList() {
   const { data: workspaces = [] } = useWorkspaces();
   const getWorkspace = (id: string) => workspaces.find((w) => w.id === id);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { can } = usePermissions();
+  const clone = useSaveChallenge();
+  const canCreate = can('challenge.create');
+
+  /**
+   * Clone-to-create. ROADMAP Phase 2 "challenge templates".
+   *
+   * The copy is always a **draft**, always gets a fresh id and slug, and
+   * deliberately does not carry the original's counters, timeline or entrants —
+   * duplicating a running challenge should give you a blank competition shaped
+   * like it, not a second one claiming 184 entrants who never entered.
+   *
+   * The form schema *is* shared: schemas are versioned and immutable once
+   * published (hard rule 6), so pointing at the same version is correct and
+   * avoids a pointless duplicate.
+   */
+  const duplicate = async (source: (typeof challenges)[number]) => {
+    const title = `${source.title} (copy)`;
+    const id = newChallengeId(title);
+    await clone.mutateAsync({
+      input: {
+        id,
+        workspaceId: source.workspaceId,
+        title,
+        slug: uniqueSlug(title, challenges.map((c2) => c2.slug)),
+        description: source.description,
+        category: source.category,
+        tags: source.tags ?? [],
+        status: 'draft',
+        visibility: source.visibility,
+        cover: source.cover ?? '',
+        formSchemaId: source.formSchemaId,
+        formSchemaVersion: 1,
+        prize: source.prize ?? '',
+        blindJudging: source.blindJudging ?? false,
+        teamsEnabled: source.teamsEnabled ?? false,
+        maxTeamSize: source.maxTeamSize ?? 4,
+        leaderboardMode: source.leaderboardMode,
+        stages: source.stages.map((s) => ({ ...s, state: 'locked' as const })),
+        // Dates are the one thing that never survives a copy: they described
+        // the original's calendar, and silently inheriting them would create a
+        // challenge whose deadline has already passed.
+        timeline: { registrationClosesAt: null, submissionClosesAt: null, resultsAt: null },
+      },
+      userId: user?.uid,
+      isNew: true,
+    });
+    navigate(`/org/challenges/${id}/edit`);
+  };
 
   const rows = useMemo(
     () => challenges.filter((ch) => tab === 0 || ch.status === TABS[tab]),
@@ -100,6 +153,22 @@ export default function ChallengesList() {
                 <Box sx={{ width: 120, flex: 'none' }}>
                   <StatusPill status={ch.status} />
                 </Box>
+                {canCreate && (
+                  <Tooltip title="Duplicate as a new draft">
+                    <IconButton
+                      size="small"
+                      aria-label={`Duplicate ${ch.title}`}
+                      disabled={clone.isPending}
+                      onClick={(e) => {
+                        // The row itself navigates; duplicating must not.
+                        e.stopPropagation();
+                        void duplicate(ch);
+                      }}
+                    >
+                      <Icon name="content_copy" size={18} />
+                    </IconButton>
+                  </Tooltip>
+                )}
               </Box>
             );
           })}

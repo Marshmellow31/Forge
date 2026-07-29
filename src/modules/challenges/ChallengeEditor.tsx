@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider,
-  IconButton, MenuItem, Stack, Tab, Tabs, TextField, Tooltip, Typography,
+  FormControlLabel, IconButton, MenuItem, Stack, Switch, Tab, Tabs, TextField,
+  Tooltip, Typography,
 } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { DriveLinkInput } from '@shared/ui/DriveLinkInput';
@@ -43,6 +44,9 @@ type Draft = {
   cover: string;
   formSchemaId: string;
   prize: string;
+  blindJudging: boolean;
+  teamsEnabled: boolean;
+  maxTeamSize: number;
   leaderboardMode: Challenge['leaderboardMode'];
   stages: Array<{ key: string; name: string; type: string; state: 'done' | 'active' | 'locked' }>;
   timeline: { registrationClosesAt: string; submissionClosesAt: string; resultsAt: string };
@@ -70,6 +74,9 @@ function emptyDraft(workspaceId: string, formSchemaId: string): Draft {
     cover: '',
     formSchemaId,
     prize: '',
+    blindJudging: false,
+    teamsEnabled: false,
+    maxTeamSize: 4,
     leaderboardMode: 'afterClose',
     stages: DEFAULT_STAGES.map((s) => ({ ...s })),
     timeline: { registrationClosesAt: '', submissionClosesAt: '', resultsAt: '' },
@@ -130,6 +137,9 @@ export default function ChallengeEditor() {
         cover: existing.cover ?? '',
         formSchemaId: existing.formSchemaId,
         prize: existing.prize ?? '',
+        blindJudging: existing.blindJudging ?? false,
+        teamsEnabled: existing.teamsEnabled ?? false,
+        maxTeamSize: existing.maxTeamSize ?? 4,
         leaderboardMode: existing.leaderboardMode,
         stages: existing.stages.map((s) => ({ ...s })),
         timeline: {
@@ -592,6 +602,52 @@ export default function ChallengeEditor() {
             placeholder="₹25,000 and a feature on the community page"
             helperText="Recorded and displayed. Forge never disburses money."
           />
+
+          <Divider />
+
+          <Box>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={draft.blindJudging}
+                  onChange={(e) => set('blindJudging', e.target.checked)}
+                />
+              }
+              label={<Typography sx={{ fontSize: 15, fontWeight: 600 }}>Blind judging</Typography>}
+            />
+            <Typography sx={{ fontSize: 13, color: c.inkMuted, lineHeight: 1.6, ml: 6 }}>
+              Judges see “Entry 4F2A” instead of a name, and fields marked as personal are
+              withheld from the scoring screen. Exports are anonymized too — otherwise one click
+              would undo it. Turn this on <b>before</b> judging starts; switching it on afterwards
+              does not un-see anything.
+            </Typography>
+          </Box>
+
+          <Box>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={draft.teamsEnabled}
+                  onChange={(e) => set('teamsEnabled', e.target.checked)}
+                />
+              }
+              label={<Typography sx={{ fontSize: 15, fontWeight: 600 }}>Team entries</Typography>}
+            />
+            <Typography sx={{ fontSize: 13, color: c.inkMuted, lineHeight: 1.6, ml: 6, mb: 1.5 }}>
+              Entrants register as a team and submit once for the group. One person is the
+              captain and owns the submission.
+            </Typography>
+            {draft.teamsEnabled && (
+              <TextField
+                size="small"
+                type="number"
+                label="Maximum team size"
+                value={draft.maxTeamSize}
+                onChange={(e) => set('maxTeamSize', Math.max(2, Number(e.target.value)))}
+                sx={{ width: 200, ml: 6 }}
+              />
+            )}
+          </Box>
 
           <TextField
             select label="Status" fullWidth value={draft.status}

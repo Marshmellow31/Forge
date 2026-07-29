@@ -73,6 +73,11 @@ export const toChallenge = (d: ChallengeDoc): Challenge => ({
   counters: d.counters,
   leaderboardMode: d.leaderboardMode === 'topN' ? 'live' : d.leaderboardMode,
   prize: d.prize,
+  // Absent reads as off. Turning blind judging on by accident would silently
+  // change how a live competition behaves.
+  blindJudging: d.blindJudging ?? false,
+  teamsEnabled: d.teamsEnabled ?? false,
+  maxTeamSize: d.maxTeamSize ?? 4,
 });
 
 export const toRegistration = (d: RegistrationDoc): Registration => ({

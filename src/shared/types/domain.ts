@@ -69,6 +69,15 @@ export interface Challenge {
   counters: { registrations: number; submissions: number; reviewsCompleted: number; reviewsPending: number };
   leaderboardMode: 'hidden' | 'live' | 'afterClose' | 'public';
   prize: string;
+  /**
+   * Withhold entrant identity from judges. Optional so existing challenges keep
+   * loading; absent reads as `false`, because turning blind judging *on* by
+   * accident would be a surprising change to how a live competition behaves.
+   */
+  blindJudging?: boolean;
+  /** Team entries. `Registration.team` has existed since day one. */
+  teamsEnabled?: boolean;
+  maxTeamSize?: number;
 }
 
 export interface Registration {

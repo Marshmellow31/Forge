@@ -26,6 +26,7 @@ const AdminDashboard = lazy(() => import('@modules/organizations/AdminDashboard'
 const Members = lazy(() => import('@modules/organizations/Members'));
 const Workspaces = lazy(() => import('@modules/organizations/Workspaces'));
 const CreateOrganization = lazy(() => import('@modules/organizations/CreateOrganization'));
+const PublicOrgPage = lazy(() => import('@modules/organizations/PublicOrgPage'));
 const AuditLog = lazy(() => import('@modules/organizations/AuditLog'));
 const Analytics = lazy(() => import('@modules/organizations/Analytics'));
 const Settings = lazy(() => import('@modules/organizations/Settings'));
@@ -67,6 +68,8 @@ export default function App() {
             shell's nav assumes you have already chosen a surface. */}
         <Route path="/" element={<Landing />} />
         <Route path="/welcome" element={<Welcome />} />
+        {/* Public organization page — shareable, works signed out. */}
+        <Route path="/o/:slug" element={<PublicOrgPage />} />
 
         <Route element={<AppShell />}>
           {/* For you */}

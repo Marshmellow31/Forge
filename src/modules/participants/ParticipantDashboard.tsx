@@ -4,7 +4,8 @@ import { Icon } from '@shared/ui/Icon';
 import {
   Hero, StatTile, SectionLabel, ProgressBar, StatusPill, EmptyState, liftSx,
 } from '@shared/ui/primitives';
-import { ChallengeCard, StageStepper } from '@modules/challenges/components';
+import { StageStepper } from '@shared/ui/StageStepper';
+import { ChallengeCard } from '@shared/ui/ChallengeCard';
 import { c, radius, ease } from '@shared/design/tokens';
 import { useChallenges, useBadges, useCertificates, useCurrentUser } from '@core/firebase/hooks';
 import { useAuth } from '@core/auth';

@@ -189,6 +189,9 @@ export interface ChallengeInput {
   formSchemaId: string;
   formSchemaVersion: number;
   prize: string;
+  blindJudging: boolean;
+  teamsEnabled: boolean;
+  maxTeamSize: number;
   leaderboardMode: 'hidden' | 'live' | 'afterClose' | 'public';
   /** Carries the workflow rules the stage designer sets. See core/workflow. */
   stages: Stage[];
@@ -233,6 +236,9 @@ export async function writeChallenge(input: ChallengeInput, userId: string, isNe
     formSchemaId: input.formSchemaId,
     formSchemaVersion: input.formSchemaVersion,
     prize: input.prize,
+    blindJudging: input.blindJudging,
+    teamsEnabled: input.teamsEnabled,
+    maxTeamSize: input.maxTeamSize,
     leaderboardMode: input.leaderboardMode,
     stages: input.stages,
     timeline: {

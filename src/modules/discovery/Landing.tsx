@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Box, Button, Stack, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { useChallenges } from '@core/firebase/hooks';
-import { ChallengeCard } from '@modules/challenges/components';
+import { ChallengeCard } from '@shared/ui/ChallengeCard';
 import { Blobs, Eyebrow } from '@shared/ui/primitives';
 import { c, radius, ease } from '@shared/design/tokens';
 

@@ -115,21 +115,42 @@ export default tseslint.config(
         policies: [
           {
             from: { element: { type: 'modules' } },
-            allow: { to: { element: { type: 'core' } } },
-          },
-          {
-            from: { element: { type: 'modules' } },
-            allow: { to: { element: { types: { anyOf: ['shared', 'config'] } } } },
-          },
-          // Same module only: `{{from.module}}` binds to the importing file's
-          // captured module name, so forms→forms passes and forms→judging does not.
-          {
-            from: { element: { type: 'modules' } },
-            allow: { to: { element: { type: 'modules', capture: { module: '{{from.capture.module}}' } } } },
+            allow: { to: { element: { types: { anyOf: ['modules', 'core', 'shared', 'config'] } } } },
           },
         ],
-        message:
-          'No module imports another module (CLAUDE.md). Route the shared need through core/ or a shared contract type.',
+      }],
+
+      /**
+       * "No module imports another module" (CLAUDE.md), enforced by path.
+       *
+       * `boundaries/dependencies` cannot express this here: its captured-value
+       * selector for "same module as the importer" silently fails to match, so
+       * the policy degrades to "modules → modules, always" and the rule can
+       * never fire. That was verified with a deliberate cross-module import —
+       * the same trap as the missing import resolver in ADR-021, and the reason
+       * this is a plain path rule instead.
+       *
+       * It works because the codebase already distinguishes the two cases:
+       * a file imports its *own* module relatively (`./components`) and another
+       * module through the alias (`@modules/challenges/components`). So
+       * forbidding the alias inside `src/modules/**` forbids exactly the
+       * cross-module case and nothing else.
+       */
+      'no-restricted-imports': ['error', {
+        patterns: [
+          {
+            group: ['@modules/*', '@modules/*/**'],
+            message:
+              'No module imports another module (CLAUDE.md). Import your own module relatively (./x), and route a cross-feature need through core/ or shared/.',
+          },
+        ],
+        paths: [
+          {
+            name: 'firebase/firestore',
+            message:
+              'Components and engines never import the Firestore SDK directly. Reads go through @core/firebase/hooks, writes through @core/sync.',
+          },
+        ],
       }],
     },
   },

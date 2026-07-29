@@ -8,7 +8,7 @@ import {
 } from '@core/firebase/hooks';
 import { ListSkeleton } from '@shared/ui/primitives';
 import { ExportMenu } from '@shared/ui/ExportMenu';
-import { StageStepper } from './components';
+import { StageStepper } from '@shared/ui/StageStepper';
 import {
   StatTile, EmptyState, PersonCell, ScoreCell, StatusPill, SectionLabel, TableHead,
   tableRowSx, Num, Tag, ProgressBar,
@@ -76,7 +76,7 @@ export default function ChallengeControlRoom() {
           <ExportMenu
             challengeSlug={ch.slug}
             schema={schema}
-            blind={ch.leaderboardMode === 'hidden'}
+            blind={ch.blindJudging ?? false}
             registrations={regs.map((r) => ({
               id: r.id, name: r.name, email: r.email, status: r.status,
               registeredAt: r.registeredAt, checkedIn: r.checkedIn, answers: r.answers,

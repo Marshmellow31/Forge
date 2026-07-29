@@ -10,7 +10,7 @@ import { listFieldTypes, getFieldType } from '@core/forms/registry';
 import { useChallenge, useFormSchemas } from '@core/firebase/hooks';
 import { usePublishSchema } from '@core/firebase/mutations';
 import { useAuth } from '@core/auth';
-import { FormRenderer, useFormEngine } from './FormRenderer';
+import { FormRenderer, useFormEngine } from '@shared/ui/forms/FormRenderer';
 import { EmptyState, Tag, Eyebrow, ListSkeleton } from '@shared/ui/primitives';
 import { c, radius, ease, mono } from '@shared/design/tokens';
 

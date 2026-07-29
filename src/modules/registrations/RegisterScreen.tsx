@@ -9,7 +9,7 @@ import { useChallengeBySlug, useFormSchemas } from '@core/firebase/hooks';
 import { useSubmitRegistration } from '@core/firebase/mutations';
 import { useAuth } from '@core/auth';
 import { NotSignedInError } from '@core/sync';
-import { FormRenderer, useFormEngine } from '@modules/forms/FormRenderer';
+import { FormRenderer, useFormEngine } from '@shared/ui/forms/FormRenderer';
 import { stripHiddenAnswers } from '@core/forms/conditions';
 import { EmptyState, Tag, ListSkeleton } from '@shared/ui/primitives';
 import { c, radius, mono } from '@shared/design/tokens';
