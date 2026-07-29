@@ -1,0 +1,207 @@
+/* Tailwind v4 — theme + utilities only.
+   Preflight is deliberately NOT imported: it would reset MUI's baseline.
+   Tailwind handles layout/spacing, MUI handles components. See CONVENTIONS.md §7 */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/* Colour values mirror src/app/tokens.ts. Keep the two in step. */
+:root {
+  --surface: #fdf8ec;
+  --surface-card: #fffdf6;
+  --surface-container: #f5edda;
+  --outline: #e7dfc8;
+  --ink: #1d1b13;
+  --ink-muted: #4b4739;
+  --primary: #f3dc85;
+  --accent: #e5cb63;
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Figtree, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* ---------- Material Symbols Rounded ----------
+   .ms is the outlined default; add .msf for the filled variant. */
+.ms {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+  user-select: none;
+  flex: none;
+}
+.msf {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* ---------- form controls ---------- */
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+}
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  height: 24px;
+  width: 100%;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: #e3d9bf;
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-top: -6px;
+  border: 2px solid var(--surface-card);
+  box-shadow: 0 1px 3px rgba(60, 50, 10, 0.28);
+}
+
+/* ---------- scrollbars ---------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #dcd3bb transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #dcd3bb;
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- motion ----------
+   Names match the design source so the two can be diffed. */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes sheetUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes snackUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes shimmer {
+  0% {
+    background-position: -380px 0;
+  }
+  100% {
+    background-position: 380px 0;
+  }
+}
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0);
+  }
+  50% {
+    transform: translate(-14px, 10px) rotate(6deg);
+  }
+}
+@keyframes pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.rise {
+  animation: fadeUp 320ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+.shimmer {
+  background: linear-gradient(90deg, #f2ead6 8%, #f8f1e0 18%, #f2ead6 33%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
