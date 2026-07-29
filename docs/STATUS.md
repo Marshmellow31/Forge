@@ -29,6 +29,8 @@ engine — pure schema types, condition evaluator, Zod compiler, two-half field
 registry — is still the architectural set-piece, and it still has **zero tests**.
 That is the largest gap and the next thing worth doing.
 
+The backend is now **live** on branch `feat/firebase-backend` — see §8.
+
 ## 2. Progress by area
 
 Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/broken
@@ -42,10 +44,10 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
 - [ ] `eslint-plugin-boundaries` dependency rule (ESLint not configured at all yet)
 - [ ] Vitest + first unit tests **← the form engine has zero tests, and it is the
       one thing in this repo that most needs them**
-- [ ] Firebase project / env contract / typed data layer
+- [x] Firebase project / env contract / typed data layer — **live**, see §8
 - [ ] CI
 
-### Phase 1 — MVP frontend (demo mode)
+### Phase 1 — MVP frontend (live read-only backend)
 
 **Core engine — done and real**
 - [x] `core/forms/types.ts` — schema, field, condition, FileRef types
@@ -92,7 +94,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
 - [ ] S-07 Certificate verification · S-59 Leaderboard (participant) · S-60 Results
 - [ ] Everything else in `UI_SCREENS.md`
 
-**Mock data**
+**Demo data** (now the seed source, not a runtime dependency)
 - [x] `src/mock/data.ts` — 3 orgs, 4 workspaces, 6 challenges (photography,
       hackathon, wellness, meme, design, pitch), 5 form schemas, 18 registrations,
       16 submissions, leaderboard, rubric, members, audit log, badges, certificates
