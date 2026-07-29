@@ -325,6 +325,12 @@ clearest case: the signature that proves a request came from Forge needs a
 secret the browser cannot hold, and an *unsigned* webhook is one anybody can
 forge — worse than none.
 
+**The client half of webhooks is built** — Settings → Webhooks registers
+endpoints and generates a signing secret. The screen says plainly that nothing
+is delivered yet, because a webhook that silently never fires is worse than one
+that admits it is not connected. That is the maximum Phase 3 progress available
+without a server, and it means enabling Blaze is a deploy rather than a build.
+
 **`functions/` now exists**, written and waiting. `cd functions && npm install
 && npm run deploy` the day billing is on. **It has never run** — treat every
 line as unverified until it has executed once against a real project.

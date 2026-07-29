@@ -216,6 +216,23 @@ export async function submitEntry(args: SubmitEntryArgs) {
 }
 
 /* ================================================================== *
+ * Webhooks — ROADMAP Phase 3 (configuration half)                     *
+ * ================================================================== */
+
+export async function saveWebhook(
+  orgId: string,
+  hook: { id: string; url: string; event: string; active: boolean; secret?: string },
+  userId: string | undefined,
+) {
+  return writes.writeWebhook(orgId, hook, requireUser(userId));
+}
+
+export async function removeWebhook(orgId: string, webhookId: string, userId: string | undefined) {
+  requireUser(userId);
+  return writes.deleteWebhook(orgId, webhookId);
+}
+
+/* ================================================================== *
  * Custom roles, check-in and voting — ROADMAP Phase 2                 *
  * ================================================================== */
 

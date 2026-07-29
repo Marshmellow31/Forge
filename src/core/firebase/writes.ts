@@ -495,6 +495,61 @@ export async function writeOrganization(input: OrgInput, user: {
 }
 
 /* ================================================================== *
+ * Webhooks — ROADMAP Phase 3 (configuration half)                     *
+ * ================================================================== */
+
+/**
+ * Registers a webhook endpoint.
+ *
+ * **Configuration is client-side; delivery is not.** The signing secret lives
+ * in this document and is read only by `functions/dispatchWebhook` — a browser
+ * cannot sign a request without publishing the secret in its bundle, and an
+ * unsigned webhook is one anybody can forge. So this screen stores intent, and
+ * nothing is delivered until Cloud Functions are deployed on Blaze.
+ *
+ * That split is stated in the UI rather than implied: a webhook that silently
+ * never fires is worse than one that says it is not connected yet.
+ *
+ * The secret is generated here rather than typed. People choose guessable
+ * secrets, and there is no reason to let them.
+ */
+export async function writeWebhook(
+  orgId: string,
+  hook: { id: string; url: string; event: string; active: boolean; secret?: string },
+  userId: string,
+) {
+  const secret = hook.secret ?? generateSecret();
+  await setDoc(
+    doc(db(), 'organizations', orgId, 'webhooks', hook.id),
+    {
+      url: hook.url.trim(),
+      event: hook.event,
+      active: hook.active,
+      secret,
+      lastStatus: null,
+      lastAttemptAt: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      createdBy: userId,
+      schemaVersion: 1,
+    },
+    { merge: true },
+  );
+  return hook.id;
+}
+
+export async function deleteWebhook(orgId: string, webhookId: string) {
+  await deleteDoc(doc(db(), 'organizations', orgId, 'webhooks', webhookId));
+}
+
+/** 32 bytes of CSPRNG output, hex-encoded. Never a timestamp or a UUID. */
+function generateSecret(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/* ================================================================== *
  * Custom roles — ROADMAP Phase 2                                      *
  * ================================================================== */
 

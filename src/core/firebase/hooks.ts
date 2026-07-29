@@ -100,6 +100,9 @@ export const useRoles = (orgId = demoOrgId()) =>
 export const useInvites = (orgId = demoOrgId()) =>
   useQuery({ queryKey: qk.invites(orgId), queryFn: () => q.fetchInvites(orgId) });
 
+export const useWebhooks = (orgId = demoOrgId()) =>
+  useQuery({ queryKey: qk.webhooks(orgId), queryFn: () => q.fetchWebhooks(orgId) });
+
 export const useVotes = (cid: string | undefined, userId?: string, orgId = demoOrgId()) =>
   useQuery({
     queryKey: qk.votes(orgId, cid ?? ''),

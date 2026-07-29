@@ -32,6 +32,7 @@ export const qk = {
   roles: (orgId: string) => ['org', orgId, 'roles'] as const,
   invites: (orgId: string) => ['org', orgId, 'invites'] as const,
   votes: (orgId: string, cid: string) => ['org', orgId, 'challenge', cid, 'votes'] as const,
+  webhooks: (orgId: string) => ['org', orgId, 'webhooks'] as const,
 
   user: (userId: string) => ['user', userId] as const,
   certificates: () => ['certificates'] as const,

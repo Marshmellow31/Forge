@@ -167,6 +167,22 @@ export async function fetchInvites(orgId: string) {
   }
 }
 
+/** Webhook endpoints. Returns `[]` for anyone without `integration.manage`. */
+export async function fetchWebhooks(orgId: string) {
+  try {
+    const snap = await getDocs(collection(db(), 'organizations', orgId, 'webhooks'));
+    return snap.docs.map((d) => ({
+      id: d.id,
+      url: String(d.data().url ?? ''),
+      event: String(d.data().event ?? ''),
+      active: Boolean(d.data().active),
+      lastStatus: (d.data().lastStatus ?? null) as number | null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Vote tallies for a challenge.
  *

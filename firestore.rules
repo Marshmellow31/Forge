@@ -185,6 +185,16 @@ service cloud.firestore {
         }
       }
 
+      // Webhook endpoints (ROADMAP Phase 3, configuration half).
+      //
+      // The document holds a signing secret, so it is readable ONLY by someone
+      // who could already create one. A member who could read it could forge
+      // requests that the receiver would trust as coming from Forge — which is
+      // the entire point of signing them.
+      match /webhooks/{webhookId} {
+        allow read, write: if hasPerm(orgId, 'integration.manage');
+      }
+
       // Pending invitations, keyed by lowercased email.
       match /invites/{email} {
         // You may read an invite addressed to you — that is how the app knows

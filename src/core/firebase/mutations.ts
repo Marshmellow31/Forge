@@ -167,6 +167,30 @@ export function useSubmitEntry(challengeId: string | undefined, orgId = demoOrgI
 }
 
 /* ================================================================== *
+ * Webhooks (configuration half — delivery needs Blaze)                *
+ * ================================================================== */
+
+export function useSaveWebhook(orgId = demoOrgId()) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ hook, userId }: {
+      hook: { id: string; url: string; event: string; active: boolean };
+      userId: string | undefined;
+    }) => sync.saveWebhook(orgId, hook, userId),
+    onSettled: () => void qc.invalidateQueries({ queryKey: qk.webhooks(orgId) }),
+  });
+}
+
+export function useDeleteWebhook(orgId = demoOrgId()) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ webhookId, userId }: { webhookId: string; userId: string | undefined }) =>
+      sync.removeWebhook(orgId, webhookId, userId),
+    onSettled: () => void qc.invalidateQueries({ queryKey: qk.webhooks(orgId) }),
+  });
+}
+
+/* ================================================================== *
  * Custom roles, check-in and voting                                   *
  * ================================================================== */
 

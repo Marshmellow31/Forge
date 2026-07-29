@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import {
   Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle,
-  Divider, FormControlLabel, Stack, TextField, Typography,
+  Divider, FormControlLabel, MenuItem, Stack, TextField, Typography,
 } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { OrgLogo } from '@shared/ui/OrgLogo';
 import { QueryBoundary } from '@shared/ui/QueryBoundary';
 import { PageTitle, Eyebrow, Tag, panelSx, containerSx, Num } from '@shared/ui/primitives';
-import { useOrg, useMembers, useChallenges, useRoles } from '@core/firebase/hooks';
-import { useSaveRole, useDeleteRole } from '@core/firebase/mutations';
+import { useOrg, useMembers, useChallenges, useRoles, useWebhooks } from '@core/firebase/hooks';
+import {
+  useSaveRole, useDeleteRole, useSaveWebhook, useDeleteWebhook,
+} from '@core/firebase/mutations';
 import { useAuth, usePermissions } from '@core/auth';
 import { PERMISSIONS, BUILT_IN_ROLE_LIST } from '@core/rbac';
 import { c, radius, mono } from '@shared/design/tokens';
@@ -42,6 +44,11 @@ export default function Settings() {
   const saveRole = useSaveRole();
   const removeRole = useDeleteRole();
   const [editing, setEditing] = useState<RoleDraft | null>(null);
+
+  const { data: webhooks = [] } = useWebhooks();
+  const saveWebhook = useSaveWebhook();
+  const removeWebhook = useDeleteWebhook();
+  const [hook, setHook] = useState<{ id: string; url: string; event: string; active: boolean } | null>(null);
 
   // Only the org's own roles; the built-ins are resolved from code, not read.
   const customRoles = allRoles.filter((r) => !r.isSystem);
@@ -259,6 +266,96 @@ export default function Settings() {
               }}
             >
               {saveRole.isPending ? 'Saving…' : 'Save role'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {can('integration.manage') && (
+          <Box sx={{ ...panelSx, mb: 3 }}>
+            <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
+              <Eyebrow>Webhooks</Eyebrow>
+              <Box sx={{ flex: 1 }} />
+              <Button
+                size="small"
+                startIcon={<Icon name="add" size={18} />}
+                onClick={() => setHook({ id: `wh_${Date.now().toString(36)}`, url: '', event: 'results.published', active: true })}
+              >
+                Add endpoint
+              </Button>
+            </Stack>
+
+            {/* Stated, not hidden: a webhook that silently never fires is worse
+                than one that says it is not connected yet. */}
+            <Stack direction="row" gap={1.5} sx={{ p: 2, mb: 2, borderRadius: `${radius.field}px`, background: c.primaryContainer }}>
+              <Icon name="info" size={20} color={c.primaryIcon} />
+              <Typography sx={{ fontSize: 13, color: c.onPrimaryContainer, lineHeight: 1.6 }}>
+                Endpoints are saved here, but <b>nothing is delivered yet</b>. Delivery signs each
+                request with a secret, which a browser cannot hold without publishing it — so it
+                runs in a Cloud Function (<Box component="code" sx={{ fontFamily: mono }}>functions/</Box>,
+                written and ready) and needs the Blaze plan. An unsigned webhook is one anybody
+                could forge, which is worse than none.
+              </Typography>
+            </Stack>
+
+            {webhooks.length === 0 ? (
+              <Typography sx={{ fontSize: 13.5, color: c.inkFaint }}>No endpoints yet.</Typography>
+            ) : (
+              <Stack gap={1}>
+                {webhooks.map((w) => (
+                  <Stack key={w.id} direction="row" alignItems="center" gap={1.5} sx={{ p: 1.5, borderRadius: `${radius.field}px`, background: c.surfaceContainer }}>
+                    <Icon name="webhook" size={20} color={c.primaryIcon} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography noWrap sx={{ fontSize: 13.5, fontWeight: 600 }}>{w.url}</Typography>
+                      <Typography sx={{ fontSize: 12, color: c.inkFaint }}>on {w.event}</Typography>
+                    </Box>
+                    <Tag bg={c.surfaceField} fg={c.inkMuted}>
+                      {w.lastStatus === null ? 'never fired' : `last ${w.lastStatus}`}
+                    </Tag>
+                    <Button
+                      size="small"
+                      color="error"
+                      onClick={() => removeWebhook.mutate({ webhookId: w.id, userId: user?.uid })}
+                    >
+                      Remove
+                    </Button>
+                  </Stack>
+                ))}
+              </Stack>
+            )}
+          </Box>
+        )}
+
+        <Dialog open={hook !== null} onClose={() => setHook(null)} fullWidth maxWidth="sm">
+          <DialogTitle>Add a webhook endpoint</DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus fullWidth label="URL" sx={{ mt: 1, mb: 2 }}
+              value={hook?.url ?? ''}
+              placeholder="https://example.com/hooks/forge"
+              onChange={(e) => setHook((h) => h && { ...h, url: e.target.value })}
+              helperText="Must be https. A signing secret is generated for you — people choose guessable ones."
+            />
+            <TextField
+              select fullWidth label="Fires on"
+              value={hook?.event ?? 'results.published'}
+              onChange={(e) => setHook((h) => h && { ...h, event: e.target.value })}
+            >
+              {['results.published', 'registration.created', 'submission.received', 'challenge.published']
+                .map((e) => <MenuItem key={e} value={e}>{e}</MenuItem>)}
+            </TextField>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2.5 }}>
+            <Button onClick={() => setHook(null)}>Cancel</Button>
+            <Button
+              variant="contained"
+              disabled={!/^https:\/\//.test(hook?.url ?? '') || saveWebhook.isPending}
+              onClick={async () => {
+                if (!hook) return;
+                await saveWebhook.mutateAsync({ hook, userId: user?.uid });
+                setHook(null);
+              }}
+            >
+              {saveWebhook.isPending ? 'Saving…' : 'Save endpoint'}
             </Button>
           </DialogActions>
         </Dialog>
