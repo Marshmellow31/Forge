@@ -9,8 +9,9 @@
  * a Firebase type. The stored shapes live in `core/firebase/types.ts`.
  */
 import type { FormSchema } from '@core/forms/types';
+import type { AdvanceRule } from '@core/workflow/types';
 
-export type { FormSchema };
+export type { FormSchema, AdvanceRule };
 
 export interface Org {
   id: string;
@@ -39,6 +40,15 @@ export interface Stage {
   name: string;
   type: string;
   state: 'done' | 'active' | 'locked';
+  /**
+   * How participants leave this stage. Optional so every existing seeded
+   * challenge keeps working — a stage without one is treated as `{ mode:
+   * 'manual' }`, which holds everybody and is the safe default: an organiser
+   * who has not chosen a rule should not have people advanced automatically.
+   */
+  advanceRule?: AdvanceRule;
+  /** Epoch millis. Only `deadline` rules read it. */
+  window?: { opensAt: number | null; closesAt: number | null } | null;
 }
 
 export interface Challenge {

@@ -15,6 +15,7 @@ import { useAuth, usePermissions } from '@core/auth';
 import {
   slugify, uniqueSlug, newChallengeId, newCriterionId, DEFAULT_STAGES, CATEGORIES,
 } from '@core/challenges/slug';
+import { StageDesigner } from './StageDesigner';
 import { c, radius, ease } from '@shared/design/tokens';
 import type { Challenge } from '@shared/types/domain';
 
@@ -489,67 +490,9 @@ export default function ChallengeEditor() {
       )}
 
       {tab === 3 && (
-        <Stack gap={2.5} sx={panelSx}>
-          <Box>
-            <Typography sx={{ fontSize: 17, fontWeight: 700, mb: 0.5 }}>Stages</Typography>
-            <Typography sx={{ fontSize: 14, color: c.inkMuted, lineHeight: 1.6 }}>
-              The path a participant walks. These are data, not code — rename them, drop one, or add a
-              screening round, and the workflow engine follows.
-            </Typography>
-          </Box>
-
-          {draft.stages.map((stage, i) => (
-            <Stack key={stage.key} direction="row" gap={1.5} alignItems="center">
-              <Box sx={{ width: 28, textAlign: 'center', color: c.inkFaint, fontSize: 13 }}>{i + 1}</Box>
-              <TextField
-                size="small" label="Name" value={stage.name} sx={{ flex: 1 }}
-                onChange={(e) => set('stages', draft.stages.map((s, j) =>
-                  j === i ? { ...s, name: e.target.value } : s))}
-              />
-              <TextField
-                size="small" select label="State" value={stage.state} sx={{ width: 130 }}
-                onChange={(e) => set('stages', draft.stages.map((s, j) =>
-                  j === i ? { ...s, state: e.target.value as typeof s.state } : s))}
-              >
-                <MenuItem value="done">Done</MenuItem>
-                <MenuItem value="active">Active</MenuItem>
-                <MenuItem value="locked">Locked</MenuItem>
-              </TextField>
-              <IconButton
-                aria-label={`Move ${stage.name} up`}
-                disabled={i === 0}
-                onClick={() => {
-                  const next = [...draft.stages];
-                  [next[i - 1], next[i]] = [next[i], next[i - 1]];
-                  set('stages', next);
-                }}
-              >
-                <Icon name="arrow_upward" size={18} />
-              </IconButton>
-              <IconButton
-                aria-label={`Remove ${stage.name}`}
-                disabled={draft.stages.length <= 1}
-                onClick={() => set('stages', draft.stages.filter((_, j) => j !== i))}
-              >
-                <Icon name="delete" size={18} />
-              </IconButton>
-            </Stack>
-          ))}
-
-          <Button
-            variant="outlined"
-            startIcon={<Icon name="add" size={20} />}
-            sx={{ alignSelf: 'flex-start' }}
-            onClick={() => set('stages', [...draft.stages, {
-              key: `stage_${Date.now().toString(36)}`,
-              name: 'New stage',
-              type: 'custom',
-              state: 'locked' as const,
-            }])}
-          >
-            Add stage
-          </Button>
-        </Stack>
+        <Box sx={panelSx}>
+          <StageDesigner stages={draft.stages} onChange={(next) => set('stages', next)} />
+        </Box>
       )}
 
       {tab === 4 && (

@@ -227,7 +227,14 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
 - [x] **Certificates** — issued by publishing, with a public verification page
 - [x] **Public challenge discovery** — Discover screen
 - [x] **Analytics dashboard**
-- [ ] Workflow designer UI (the engine is done; only the designer is missing)
+- [x] **Workflow designer UI** (`challenges/StageDesigner.tsx`) — the Stages tab
+      of the challenge editor. Stage kind, advance rule and its parameters,
+      deadline windows, reordering. Validated live through the real engine, so
+      the designer cannot disagree with what will run.
+      It edits the **challenge's own stages** rather than a separate
+      `WorkflowDefinition` document: a definition that is not the thing being
+      executed is a second source of truth, and its first bug is a challenge
+      running a workflow its designer does not show.
 - [ ] Teams · community voting · blind judging end-to-end · QR check-in ·
       custom roles · challenge templates · public org pages · remaining field types
 

@@ -5,7 +5,7 @@ import {
 import { db } from './app';
 import { challengeDoc, inviteDoc, memberDoc, notificationDoc, notificationsCol, rubricCol, submissionDoc } from './paths';
 import { resolvedPermissionsFor, BUILT_IN_ROLE_LIST } from '@core/rbac';
-import type { FormSchema } from '@shared/types/domain';
+import type { FormSchema, Stage } from '@shared/types/domain';
 import type { NotificationDoc } from './types';
 
 /**
@@ -190,7 +190,8 @@ export interface ChallengeInput {
   formSchemaVersion: number;
   prize: string;
   leaderboardMode: 'hidden' | 'live' | 'afterClose' | 'public';
-  stages: Array<{ key: string; name: string; type: string; state: 'done' | 'active' | 'locked' }>;
+  /** Carries the workflow rules the stage designer sets. See core/workflow. */
+  stages: Stage[];
   timeline: {
     registrationClosesAt: string | null;
     submissionClosesAt: string | null;

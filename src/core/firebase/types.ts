@@ -1,4 +1,5 @@
 import type { Timestamp } from 'firebase/firestore';
+import type { AdvanceRule } from '@core/workflow/types';
 
 /**
  * Firestore document shapes, per DATA_MODEL.md §2.
@@ -132,6 +133,13 @@ export interface StageDoc {
   name: string;
   type: string;
   state: 'done' | 'active' | 'locked';
+  /**
+   * Optional so every already-seeded challenge keeps loading. A stage with no
+   * rule is read as `{ mode: 'manual' }` — nobody advances until a human says
+   * so, which is the right default for a value that was never chosen.
+   */
+  advanceRule?: AdvanceRule;
+  window?: { opensAt: number | null; closesAt: number | null } | null;
 }
 
 export interface ChallengeDoc extends BaseDoc {
