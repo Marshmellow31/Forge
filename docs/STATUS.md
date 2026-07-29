@@ -355,6 +355,21 @@ leaving them once there is one would be the worst of both.
 **All four pure engines named in CLAUDE.md hard rule 8 now exist and are tested:**
 `core/forms` (86) · `core/workflow` (49) · `core/rbac` (44) · `core/judging` (32).
 
+### Dead-control audit (all 26 routes, done in a real browser)
+
+Every route was walked with a probe that reads each control's React fiber props
+and flags any enabled `button`/`role=button` with no `onClick`, no `onMouseDown`,
+no `type=submit`, and no enclosing `<a href>` — i.e. a control that *looks*
+clickable and does nothing. **Result: zero inert controls on every route**, zero
+console errors, and the permission gates render their "you cannot do this and
+here is the role that could" panels correctly for a signed-out visitor
+(`check-in`, `publish`, `edit`). Also confirmed `/o/:slug` resolves — the demo
+org's slug is `iiitv`, not `demo`.
+
+One real gap found and fixed: Settings printed the org slug as plain text, so an
+organizer had **no way to reach or share their own public page** from inside the
+app. It is now a link to `/o/{slug}`.
+
 ## 3. Next three actions (in order)
 
 1. **Get admin control.** Two routes, and the first needs nothing from anyone:

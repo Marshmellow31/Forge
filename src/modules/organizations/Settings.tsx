@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle,
   Divider, FormControlLabel, MenuItem, Stack, TextField, Typography,
@@ -70,7 +71,15 @@ export default function Settings() {
                 {org?.name ?? 'Unknown organization'}
               </Typography>
               <Typography sx={{ fontSize: 13, color: c.inkMuted }}>
-                <Box component="span" sx={{ fontFamily: mono }}>/{org?.slug}</Box>
+                {/* The public page is otherwise unreachable from inside the app:
+                    an organizer had no way to see or share what entrants see. */}
+                <Box
+                  component={RouterLink}
+                  to={`/o/${org?.slug ?? ''}`}
+                  sx={{ fontFamily: mono, color: 'inherit', textDecoration: 'none', '&:hover': { color: c.ink, textDecoration: 'underline' } }}
+                >
+                  /{org?.slug}
+                </Box>
                 {' · '}{org?.type}{' · '}{org?.plan} plan
               </Typography>
             </Box>
