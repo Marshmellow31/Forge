@@ -282,8 +282,19 @@ service cloud.firestore {
         match /registrations/{rid} {
           allow read:   if rid == uid() || hasPerm(orgId, 'registration.read') || demoReadable(orgId);
           allow create: if rid == uid() && request.resource.data.userId == uid();
+          // Three update paths:
+          //   1. you may edit your own registration while it is still pending;
+          //   2. `registration.manage` may edit anything;
+          //   3. `registration.checkIn` may set ONLY the check-in timestamp.
+          //
+          // The third exists because a volunteer on a door needs to mark people
+          // present without also being able to disqualify them. `hasOnly` is
+          // what keeps those two powers apart — they are separate permissions
+          // in the catalog precisely so they can be granted separately.
           allow update: if (rid == uid() && resource.data.status == 'pending')
-                        || hasPerm(orgId, 'registration.manage');
+                        || hasPerm(orgId, 'registration.manage')
+                        || (hasPerm(orgId, 'registration.checkIn')
+                            && onlyChanges(['checkedInAt', 'updatedAt']));
           // create above already requires rid == uid(), so a demo viewer can
           // register themselves and no one else.
           allow delete: if hasPerm(orgId, 'registration.manage');
@@ -336,6 +347,22 @@ service cloud.firestore {
           // member*, not any signed-in client.
           allow create, update: if hasPerm(orgId, 'result.publish');
           allow delete: if false;
+        }
+
+        // Community voting. The document id IS the voter's uid, which is the
+        // whole abuse-prevention story: one document per voter means a second
+        // vote overwrites the first rather than adding to it, so there is no
+        // count to inflate by voting twice. Ballot-stuffing needs one account
+        // per vote, which is the honest bar for a free product.
+        //
+        // Votes are readable only in aggregate by staff — a public tally that
+        // named who voted for whom would change how people vote.
+        match /votes/{voterId} {
+          allow read: if voterId == uid() || hasPerm(orgId, 'score.read');
+          allow create, update: if voterId == uid()
+                                && request.resource.data.voterId == uid()
+                                && isSignedIn();
+          allow delete: if voterId == uid();
         }
 
         match /announcements/{aid} {

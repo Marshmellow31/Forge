@@ -507,6 +507,100 @@ describe('workspaces', () => {
 });
 
 /* ================================================================== *
+ * Check-in — a volunteer may mark present, and nothing else           *
+ * ================================================================== */
+
+describe('check-in', () => {
+  const regPath = (uid: string) =>
+    ['organizations', ORG, 'challenges', CHALLENGE, 'registrations', uid] as const;
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'organizations', ORG, 'members', 'u_volunteer'), {
+        userId: 'u_volunteer', status: 'active', roleIds: ['volunteer'],
+        resolvedPermissions: ['registration.read', 'registration.checkIn'],
+      });
+      await setDoc(doc(db, ...regPath('u_entrant')), {
+        userId: 'u_entrant', status: 'active', checkedInAt: null,
+      });
+    });
+  });
+
+  it('lets a volunteer check somebody in', async () => {
+    await assertSucceeds(updateDoc(doc(asUser('u_volunteer'), ...regPath('u_entrant')), {
+      checkedInAt: new Date(), updatedAt: new Date(),
+    }));
+  });
+
+  // The reason check-in is its own permission: a door volunteer must not also
+  // be able to disqualify people.
+  it('DENIES a volunteer changing anything else about the registration', async () => {
+    await assertFails(updateDoc(doc(asUser('u_volunteer'), ...regPath('u_entrant')), {
+      status: 'disqualified', updatedAt: new Date(),
+    }));
+  });
+
+  it('denies smuggling a status change alongside a check-in', async () => {
+    await assertFails(updateDoc(doc(asUser('u_volunteer'), ...regPath('u_entrant')), {
+      checkedInAt: new Date(), status: 'winner', updatedAt: new Date(),
+    }));
+  });
+
+  it('denies check-in without the permission', async () => {
+    await assertFails(updateDoc(doc(asUser('u_member'), ...regPath('u_entrant')), {
+      checkedInAt: new Date(), updatedAt: new Date(),
+    }));
+  });
+});
+
+/* ================================================================== *
+ * Community voting — one vote per account, by document id             *
+ * ================================================================== */
+
+describe('community voting', () => {
+  const votePath = (voterId: string) =>
+    ['organizations', ORG, 'challenges', CHALLENGE, 'votes', voterId] as const;
+
+  it('lets a signed-in user cast their own vote', async () => {
+    await assertSucceeds(setDoc(doc(asUser('u_member'), ...votePath('u_member')), {
+      voterId: 'u_member', submissionId: 's1',
+    }));
+  });
+
+  it('lets them change their mind — same document, overwritten', async () => {
+    const db = asUser('u_member');
+    await assertSucceeds(setDoc(doc(db, ...votePath('u_member')), { voterId: 'u_member', submissionId: 's1' }));
+    await assertSucceeds(setDoc(doc(db, ...votePath('u_member')), { voterId: 'u_member', submissionId: 's2' }));
+  });
+
+  // The whole abuse-prevention design: you cannot write a ballot that is not
+  // keyed to you, so there is no second vote to cast.
+  it('DENIES voting under another account id', async () => {
+    await assertFails(setDoc(doc(asUser('u_member'), ...votePath('u_someone_else')), {
+      voterId: 'u_someone_else', submissionId: 's1',
+    }));
+  });
+
+  it('denies a voterId that disagrees with the document id', async () => {
+    await assertFails(setDoc(doc(asUser('u_member'), ...votePath('u_member')), {
+      voterId: 'u_ballot_stuffer', submissionId: 's1',
+    }));
+  });
+
+  it('denies a signed-out visitor voting', async () => {
+    await assertFails(setDoc(doc(asGuest(), ...votePath('anon')), { voterId: 'anon', submissionId: 's1' }));
+  });
+
+  it('does not let one voter read another voter\'s ballot', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), ...votePath('u_other')), { voterId: 'u_other', submissionId: 's1' });
+    });
+    await assertFails(getDoc(doc(asUser('u_member'), ...votePath('u_other'))));
+  });
+});
+
+/* ================================================================== *
  * Notifications                                                       *
  * ================================================================== */
 

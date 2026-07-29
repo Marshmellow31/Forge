@@ -167,6 +167,71 @@ export function useSubmitEntry(challengeId: string | undefined, orgId = demoOrgI
 }
 
 /* ================================================================== *
+ * Custom roles, check-in and voting                                   *
+ * ================================================================== */
+
+export function useSaveRole(orgId = demoOrgId()) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ role, userId }: {
+      role: { id: string; name: string; description: string; permissions: string[] };
+      userId: string | undefined;
+    }) => sync.saveRole(orgId, role, userId),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: qk.roles(orgId) });
+      // A changed role changes what its holders may do, so every resolved
+      // permission set is now suspect.
+      void qc.invalidateQueries({ queryKey: qk.members(orgId) });
+    },
+  });
+}
+
+export function useDeleteRole(orgId = demoOrgId()) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ roleId, userId }: { roleId: string; userId: string | undefined }) =>
+      sync.removeRole(orgId, roleId, userId),
+    onSettled: () => void qc.invalidateQueries({ queryKey: qk.roles(orgId) }),
+  });
+}
+
+export function useCheckIn(challengeId: string | undefined, orgId = demoOrgId()) {
+  const qc = useQueryClient();
+  const key = qk.registrations(orgId, challengeId ?? '');
+
+  return useMutation({
+    mutationFn: ({ registrationId, present, userId }: {
+      registrationId: string; present: boolean; userId: string | undefined;
+    }) => sync.checkIn(orgId, challengeId!, registrationId, present, userId),
+
+    // Optimistic, because this is used at a door with a queue behind it and a
+    // round trip per person is the difference between a working desk and a
+    // bottleneck.
+    onMutate: async ({ registrationId, present }) => {
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<Registration[]>(key);
+      qc.setQueryData<Registration[]>(key, (old = []) =>
+        old.map((r) => (r.id === registrationId ? { ...r, checkedIn: present } : r)),
+      );
+      return { previous };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.previous) qc.setQueryData(key, ctx.previous);
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: key }),
+  });
+}
+
+export function useCastVote(challengeId: string | undefined, orgId = demoOrgId()) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ submissionId, voterId }: { submissionId: string; voterId: string | undefined }) =>
+      sync.castVote(orgId, challengeId!, submissionId, voterId),
+    onSettled: () => void qc.invalidateQueries({ queryKey: qk.votes(orgId, challengeId ?? '') }),
+  });
+}
+
+/* ================================================================== *
  * Organizations                                                       *
  * ================================================================== */
 

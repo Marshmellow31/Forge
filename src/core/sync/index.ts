@@ -216,6 +216,45 @@ export async function submitEntry(args: SubmitEntryArgs) {
 }
 
 /* ================================================================== *
+ * Custom roles, check-in and voting — ROADMAP Phase 2                 *
+ * ================================================================== */
+
+export async function saveRole(
+  orgId: string,
+  role: { id: string; name: string; description: string; permissions: string[] },
+  userId: string | undefined,
+) {
+  return writes.writeRole(orgId, role, requireUser(userId));
+}
+
+export async function removeRole(orgId: string, roleId: string, userId: string | undefined) {
+  requireUser(userId);
+  return writes.deleteRole(orgId, roleId);
+}
+
+export async function checkIn(
+  orgId: string,
+  challengeId: string,
+  registrationId: string,
+  present: boolean,
+  userId: string | undefined,
+) {
+  requireUser(userId);
+  return present
+    ? writes.writeCheckIn(orgId, challengeId, registrationId)
+    : writes.undoCheckIn(orgId, challengeId, registrationId);
+}
+
+export async function castVote(
+  orgId: string,
+  challengeId: string,
+  submissionId: string,
+  voterId: string | undefined,
+) {
+  return writes.writeVote(orgId, challengeId, submissionId, requireUser(voterId));
+}
+
+/* ================================================================== *
  * Organizations                                                       *
  * ================================================================== */
 

@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './app';
 import { challengeDoc, inviteDoc, memberDoc, notificationDoc, notificationsCol, rubricCol, submissionDoc } from './paths';
-import { resolvedPermissionsFor, BUILT_IN_ROLE_LIST } from '@core/rbac';
+import { resolvedPermissionsFor, BUILT_IN_ROLE_LIST, isPermission } from '@core/rbac';
 import type { FormSchema, Stage } from '@shared/types/domain';
 import type { NotificationDoc } from './types';
 
@@ -489,6 +489,128 @@ export async function writeOrganization(input: OrgInput, user: {
   await batch.commit();
 
   return input.id;
+}
+
+/* ================================================================== *
+ * Custom roles — ROADMAP Phase 2                                      *
+ * ================================================================== */
+
+/**
+ * Creates or edits a custom role.
+ *
+ * Permissions are filtered against the catalog before writing, so a malformed
+ * client cannot persist a permission string that does not exist. That is not
+ * security — the rules are — but it keeps `resolvedPermissions` meaningful:
+ * an unknown string in a role would silently grant nothing while *looking*
+ * like a grant in the UI, which is the worst of both.
+ *
+ * System roles are refused here as well as by convention: the built-ins are
+ * the vocabulary everything else is described against, and letting an org
+ * redefine "Judge" to mean "can delete challenges" would make every audit log
+ * and every support conversation ambiguous. Clone it instead.
+ */
+export async function writeRole(
+  orgId: string,
+  role: { id: string; name: string; description: string; permissions: string[] },
+  userId: string,
+) {
+  if (BUILT_IN_ROLE_LIST.some((r) => r.id === role.id)) {
+    throw new Error(
+      `"${role.name}" is a built-in role and cannot be edited. Duplicate it to make a custom version.`,
+    );
+  }
+
+  const permissions = role.permissions.filter(isPermission);
+  await setDoc(
+    doc(db(), 'organizations', orgId, 'roles', role.id),
+    {
+      name: role.name,
+      description: role.description,
+      permissions,
+      isSystem: false,
+      updatedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      createdBy: userId,
+      schemaVersion: 1,
+    },
+    { merge: true },
+  );
+  return role.id;
+}
+
+export async function deleteRole(orgId: string, roleId: string) {
+  if (BUILT_IN_ROLE_LIST.some((r) => r.id === roleId)) {
+    throw new Error('Built-in roles cannot be deleted.');
+  }
+  await deleteDoc(doc(db(), 'organizations', orgId, 'roles', roleId));
+}
+
+/* ================================================================== *
+ * Check-in — ROADMAP Phase 2                                          *
+ * ================================================================== */
+
+/**
+ * Marks a registrant present.
+ *
+ * Idempotent by construction: it sets a timestamp on a document keyed by the
+ * registrant, so scanning the same badge twice is a no-op rather than a
+ * double-count. At a door with a queue behind it, that matters more than it
+ * sounds — the common failure is a volunteer scanning again because they were
+ * not sure the first one took.
+ */
+export async function writeCheckIn(orgId: string, challengeId: string, registrationId: string) {
+  await setDoc(
+    doc(db(), 'organizations', orgId, 'challenges', challengeId, 'registrations', registrationId),
+    { checkedInAt: serverTimestamp(), updatedAt: serverTimestamp() },
+    { merge: true },
+  );
+}
+
+export async function undoCheckIn(orgId: string, challengeId: string, registrationId: string) {
+  await setDoc(
+    doc(db(), 'organizations', orgId, 'challenges', challengeId, 'registrations', registrationId),
+    { checkedInAt: null, updatedAt: serverTimestamp() },
+    { merge: true },
+  );
+}
+
+/* ================================================================== *
+ * Community voting — ROADMAP Phase 2                                  *
+ * ================================================================== */
+
+/**
+ * Casts one vote.
+ *
+ * **The document id is the voter's uid**, which is the entire abuse-prevention
+ * story and why it is not a query: one document per voter per challenge means
+ * a second vote overwrites the first rather than adding to it. There is no
+ * count to inflate by voting twice, and the rules enforce that the id equals
+ * the caller — so ballot-stuffing needs one account per vote, which is the
+ * honest bar for a free product.
+ *
+ * Voting for your own entry is refused. It is not enforceable in rules without
+ * a read of the submission, so it is a client check plus a visible rule in the
+ * UI — stated rather than silently permitted.
+ */
+export async function writeVote(
+  orgId: string,
+  challengeId: string,
+  submissionId: string,
+  voterId: string,
+) {
+  await setDoc(
+    doc(db(), 'organizations', orgId, 'challenges', challengeId, 'votes', voterId),
+    {
+      voterId,
+      submissionId,
+      at: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      createdBy: voterId,
+      schemaVersion: 1,
+    },
+  );
+  return voterId;
 }
 
 /* ================================================================== *

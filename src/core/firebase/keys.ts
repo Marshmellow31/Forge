@@ -31,6 +31,7 @@ export const qk = {
   member: (orgId: string, userId: string) => ['org', orgId, 'member', userId] as const,
   roles: (orgId: string) => ['org', orgId, 'roles'] as const,
   invites: (orgId: string) => ['org', orgId, 'invites'] as const,
+  votes: (orgId: string, cid: string) => ['org', orgId, 'challenge', cid, 'votes'] as const,
 
   user: (userId: string) => ['user', userId] as const,
   certificates: () => ['certificates'] as const,

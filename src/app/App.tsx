@@ -22,6 +22,8 @@ const ChallengeControlRoom = lazy(() => import('@modules/challenges/ChallengeCon
 const ChallengeEditor = lazy(() => import('@modules/challenges/ChallengeEditor'));
 const Leaderboard = lazy(() => import('@modules/challenges/Leaderboard'));
 const PublishResults = lazy(() => import('@modules/challenges/PublishResults'));
+const CommunityVote = lazy(() => import('@modules/challenges/CommunityVote'));
+const CheckIn = lazy(() => import('@modules/registrations/CheckIn'));
 const AdminDashboard = lazy(() => import('@modules/organizations/AdminDashboard'));
 const Members = lazy(() => import('@modules/organizations/Members'));
 const Workspaces = lazy(() => import('@modules/organizations/Workspaces'));
@@ -79,6 +81,7 @@ export default function App() {
           <Route path="/c/:slug/register" element={<RegisterScreen />} />
           <Route path="/c/:slug/submit" element={<SubmitScreen />} />
           <Route path="/c/:slug/leaderboard" element={<Leaderboard />} />
+          <Route path="/c/:slug/vote" element={<CommunityVote />} />
           <Route path="/me/registrations" element={<MyEntries />} />
           <Route path="/me/achievements" element={<Awards />} />
           <Route path="/verify/:certId" element={<VerifyCertificate />} />
@@ -91,6 +94,7 @@ export default function App() {
           <Route path="/org/challenges/:cid" element={<ChallengeControlRoom />} />
           <Route path="/org/challenges/:cid/edit" element={<ChallengeEditor />} />
           <Route path="/org/challenges/:cid/publish" element={<PublishResults />} />
+          <Route path="/org/challenges/:cid/check-in" element={<CheckIn />} />
           <Route path="/org/challenges/:cid/form" element={<FormBuilder />} />
           {/* `new` before any future /org/:orgId route. */}
           <Route path="/org/new" element={<CreateOrganization />} />

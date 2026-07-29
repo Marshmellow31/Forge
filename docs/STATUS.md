@@ -8,10 +8,10 @@
 
 **Last updated:** 2026-07-29
 **Updated by:** Claude (production hardening — writes, RBAC, Drive, tooling)
-**Current phase:** **Phase 1 complete**, Phase 2 in progress (workflow engine + CSV export done)
+**Current phase:** **Phases 0, 1 and 2 complete.** Phase 3 is blocked on Blaze, not effort
 **Repo state:** 15 screens on live Firestore (project forge-4d40a, org_demo seeded); the app now **writes**
 **Build health:** typecheck clean · lint clean (0 errors, 0 warnings) ·
-**345 unit tests + 65 security-rules tests, all passing** · production build
+**345 unit tests + 75 security-rules tests, all passing** · production build
 clean, service worker generated · **22 routes walked in a real browser with 0
 console errors** · no route renders `NotBuiltYet` any more
 **Rules + indexes are DEPLOYED to `forge-4d40a`** (2026-07-29) and reads were
@@ -258,7 +258,25 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
       existed since day one, so no migration.
 - [x] **S-09 Public organization page** (`/o/:slug`) — shareable, works signed
       out, shows only public challenges.
-- [ ] Community voting · QR check-in · custom roles
+- [x] **Community voting** (`/c/:slug/vote`) — one vote per account, enforced by
+      the **document id being the voter's uid**. That is the whole
+      abuse-prevention design: a second vote overwrites the first rather than
+      adding to it, so there is no count to inflate by voting twice, and
+      ballot-stuffing costs one account per vote. Changing your mind is the same
+      write — a system that punishes a misclick trains people not to participate.
+- [x] **QR check-in** (`/org/challenges/:cid/check-in`) — built for someone at a
+      door with a queue behind them: search is the primary control (a QR scan
+      resolves to the same id as typing a name, so it works without a camera),
+      check-in is optimistic, undo is one tap, and it works offline because the
+      Firestore SDK queues and replays the writes.
+- [x] **Custom roles** — a builder over the 40-permission catalog, in Settings.
+      Built-ins are **cloned, not edited**: they are the vocabulary everything
+      else is described against, and letting an org redefine "Judge" would make
+      every audit entry and support conversation ambiguous.
+
+**Phase 2 is now complete** apart from the offline sync queue, which
+`core/sync` documents as deliberately delegated to the Firestore SDK's own
+persistence rather than reimplemented on Dexie.
 
 **Architecture fix found while doing this.** `PublicOrgPage` needed
 `ChallengeCard`, which lived in `modules/challenges` — a module importing

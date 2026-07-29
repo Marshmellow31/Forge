@@ -1,11 +1,24 @@
-import { Box, Stack, Typography, Divider } from '@mui/material';
+import { useState } from 'react';
+import {
+  Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle,
+  Divider, FormControlLabel, Stack, TextField, Typography,
+} from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { QueryBoundary } from '@shared/ui/QueryBoundary';
 import { PageTitle, Eyebrow, Tag, panelSx, containerSx, Num } from '@shared/ui/primitives';
-import { useOrg, useMembers, useChallenges } from '@core/firebase/hooks';
-import { usePermissions } from '@core/auth';
+import { useOrg, useMembers, useChallenges, useRoles } from '@core/firebase/hooks';
+import { useSaveRole, useDeleteRole } from '@core/firebase/mutations';
+import { useAuth, usePermissions } from '@core/auth';
 import { PERMISSIONS, BUILT_IN_ROLE_LIST } from '@core/rbac';
 import { c, radius, mono } from '@shared/design/tokens';
+
+interface RoleDraft {
+  id: string;
+  name: string;
+  description: string;
+  permissions: string[];
+  isNew: boolean;
+}
 
 /**
  * S-19..22 — Organization settings.
@@ -22,8 +35,15 @@ export default function Settings() {
   const { data: org, isLoading, error } = useOrg();
   const { data: members = [] } = useMembers();
   const { data: challenges = [] } = useChallenges();
-  const { permissions, ready, isSignedIn, isMember } = usePermissions();
+  const { permissions, ready, isSignedIn, isMember, can } = usePermissions();
+  const { user } = useAuth();
+  const { data: allRoles = [] } = useRoles();
+  const saveRole = useSaveRole();
+  const removeRole = useDeleteRole();
+  const [editing, setEditing] = useState<RoleDraft | null>(null);
 
+  // Only the org's own roles; the built-ins are resolved from code, not read.
+  const customRoles = allRoles.filter((r) => !r.isSystem);
   const held = [...permissions].sort();
 
   return (
@@ -115,23 +135,140 @@ export default function Settings() {
         </Box>
 
         <Box sx={{ ...panelSx, mb: 3 }}>
-          <Eyebrow>Roles available in this organization</Eyebrow>
-          <Stack gap={2} sx={{ mt: 2 }}>
-            {BUILT_IN_ROLE_LIST.map((role, i) => (
-              <Box key={role.id}>
-                {i > 0 && <Divider sx={{ mb: 2 }} />}
-                <Stack direction="row" alignItems="baseline" gap={1.25} sx={{ mb: 0.5 }}>
-                  <Typography sx={{ fontSize: 15, fontWeight: 700 }}>{role.name}</Typography>
-                  <Tag bg={c.surfaceField} fg={c.inkMuted}>{`${role.permissions.length} permissions`}</Tag>
-                  {role.isSystem && <Tag bg={c.surfaceField} fg={c.inkFaint}>built-in</Tag>}
-                </Stack>
-                <Typography sx={{ fontSize: 13, color: c.inkMuted, lineHeight: 1.6 }}>
-                  {role.description}
-                </Typography>
-              </Box>
-            ))}
+          <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
+            <Eyebrow>Roles</Eyebrow>
+            <Box sx={{ flex: 1 }} />
+            {can('role.manage') && (
+              <Button
+                size="small"
+                startIcon={<Icon name="add" size={18} />}
+                onClick={() => setEditing({ id: `role_${Date.now().toString(36)}`, name: '', description: '', permissions: [], isNew: true })}
+              >
+                Custom role
+              </Button>
+            )}
+          </Stack>
+
+          <Stack gap={2} sx={{ mt: 1 }}>
+            {[...BUILT_IN_ROLE_LIST, ...customRoles].map((role, i) => {
+              const isCustom = !role.isSystem;
+              return (
+                <Box key={role.id}>
+                  {i > 0 && <Divider sx={{ mb: 2 }} />}
+                  <Stack direction="row" alignItems="baseline" gap={1.25} sx={{ mb: 0.5 }}>
+                    <Typography sx={{ fontSize: 15, fontWeight: 700 }}>{role.name}</Typography>
+                    <Tag bg={c.surfaceField} fg={c.inkMuted}>{`${role.permissions.length} permissions`}</Tag>
+                    {role.isSystem
+                      ? <Tag bg={c.surfaceField} fg={c.inkFaint}>built-in</Tag>
+                      : <Tag bg={c.success} fg={c.onSuccess}>custom</Tag>}
+                    <Box sx={{ flex: 1 }} />
+                    {can('role.manage') && (
+                      <Button
+                        size="small"
+                        onClick={() => setEditing({
+                          id: isCustom ? role.id : `role_${role.id}_copy`,
+                          name: isCustom ? role.name : `${role.name} (copy)`,
+                          description: role.description,
+                          permissions: [...role.permissions],
+                          isNew: !isCustom,
+                        })}
+                      >
+                        {/* Built-ins are the vocabulary everything else is
+                            described against, so they are cloned, not edited. */}
+                        {isCustom ? 'Edit' : 'Duplicate'}
+                      </Button>
+                    )}
+                  </Stack>
+                  <Typography sx={{ fontSize: 13, color: c.inkMuted, lineHeight: 1.6 }}>
+                    {role.description}
+                  </Typography>
+                </Box>
+              );
+            })}
           </Stack>
         </Box>
+
+        <Dialog open={editing !== null} onClose={() => setEditing(null)} fullWidth maxWidth="sm">
+          <DialogTitle>{editing?.isNew ? 'New custom role' : 'Edit role'}</DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus fullWidth label="Role name" sx={{ mt: 1, mb: 2 }}
+              value={editing?.name ?? ''}
+              onChange={(e) => setEditing((r) => r && { ...r, name: e.target.value })}
+            />
+            <TextField
+              fullWidth label="What is this role for?" sx={{ mb: 3 }}
+              value={editing?.description ?? ''}
+              onChange={(e) => setEditing((r) => r && { ...r, description: e.target.value })}
+              helperText="Whoever assigns this role reads this. “Organizer” means nothing on its own."
+            />
+
+            <Typography sx={{ fontSize: 13, fontWeight: 700, color: c.inkMuted, mb: 1 }}>
+              Permissions ({editing?.permissions.length ?? 0} of {PERMISSIONS.length})
+            </Typography>
+            <Box sx={{ maxHeight: 300, overflowY: 'auto', border: `1px solid ${c.outline}`, borderRadius: `${radius.field}px`, p: 1 }}>
+              {PERMISSIONS.map((p) => (
+                <FormControlLabel
+                  key={p}
+                  sx={{ display: 'flex', ml: 0 }}
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={editing?.permissions.includes(p) ?? false}
+                      onChange={(e) => setEditing((r) => r && {
+                        ...r,
+                        permissions: e.target.checked
+                          ? [...r.permissions, p]
+                          : r.permissions.filter((x) => x !== p),
+                      })}
+                    />
+                  }
+                  label={<Box component="code" sx={{ fontFamily: mono, fontSize: 12.5 }}>{p}</Box>}
+                />
+              ))}
+            </Box>
+
+            {saveRole.error && (
+              <Typography sx={{ fontSize: 13, color: c.errorBody, mt: 2, lineHeight: 1.5 }}>
+                {saveRole.error instanceof Error ? saveRole.error.message : String(saveRole.error)}
+              </Typography>
+            )}
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2.5 }}>
+            {editing && !editing.isNew && (
+              <Button
+                color="error"
+                onClick={async () => {
+                  await removeRole.mutateAsync({ roleId: editing.id, userId: user?.uid });
+                  setEditing(null);
+                }}
+              >
+                Delete
+              </Button>
+            )}
+            <Box sx={{ flex: 1 }} />
+            <Button onClick={() => setEditing(null)}>Cancel</Button>
+            <Button
+              variant="contained"
+              disabled={!editing?.name.trim() || saveRole.isPending}
+              onClick={async () => {
+                if (!editing) return;
+                await saveRole.mutateAsync({
+                  role: {
+                    id: editing.id,
+                    name: editing.name.trim(),
+                    description: editing.description.trim(),
+                    permissions: editing.permissions,
+                  },
+                  userId: user?.uid,
+                });
+                setEditing(null);
+              }}
+            >
+              {saveRole.isPending ? 'Saving…' : 'Save role'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         <Stack direction="row" gap={1.75} sx={{ ...containerSx, p: 2.25 }}>
           <Icon name="construction" size={22} color={c.primaryIcon} />

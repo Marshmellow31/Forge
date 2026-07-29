@@ -1,4 +1,6 @@
-import { collectionGroup, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
+import {
+  collection, collectionGroup, getDoc, getDocs, limit, orderBy, query, where,
+} from 'firebase/firestore';
 import { db } from './app';
 import {
   orgDoc, workspacesCol, challengesCol, challengeDoc, registrationsCol,
@@ -162,6 +164,34 @@ export async function fetchInvites(orgId: string) {
     }));
   } catch {
     return [];
+  }
+}
+
+/**
+ * Vote tallies for a challenge.
+ *
+ * Returns counts per submission plus this user's own vote — never the full
+ * ballot list. Who voted for whom is deliberately not surfaced: a visible
+ * tally that named voters would change how people vote.
+ */
+export async function fetchVotes(orgId: string, cid: string, userId?: string) {
+  try {
+    const snap = await getDocs(
+      collection(db(), 'organizations', orgId, 'challenges', cid, 'votes'),
+    );
+    const tally: Record<string, number> = {};
+    let mine: string | null = null;
+    for (const d of snap.docs) {
+      const submissionId = String(d.data().submissionId ?? '');
+      if (!submissionId) continue;
+      tally[submissionId] = (tally[submissionId] ?? 0) + 1;
+      if (userId && d.id === userId) mine = submissionId;
+    }
+    return { tally, mine, total: snap.size };
+  } catch {
+    // A participant may not read the whole collection; their own vote still
+    // resolves from the optimistic cache after they cast it.
+    return { tally: {}, mine: null, total: 0 };
   }
 }
 

@@ -100,6 +100,14 @@ export const useRoles = (orgId = demoOrgId()) =>
 export const useInvites = (orgId = demoOrgId()) =>
   useQuery({ queryKey: qk.invites(orgId), queryFn: () => q.fetchInvites(orgId) });
 
+export const useVotes = (cid: string | undefined, userId?: string, orgId = demoOrgId()) =>
+  useQuery({
+    queryKey: qk.votes(orgId, cid ?? ''),
+    queryFn: () => q.fetchVotes(orgId, cid!, userId),
+    enabled: Boolean(cid),
+    staleTime: 30_000,
+  });
+
 export const useNotifications = (userId: string | undefined, orgId = demoOrgId()) =>
   useQuery({
     queryKey: qk.notifications(orgId, userId ?? ''),
