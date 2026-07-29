@@ -1,4 +1,5 @@
 {
+  "$comment": "The `functions` block is intentionally absent. functions/ exists and is written, but deploying it needs the Blaze plan — adding the block here would make `firebase deploy` fail on Spark. Uncomment it when billing is enabled.",
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"

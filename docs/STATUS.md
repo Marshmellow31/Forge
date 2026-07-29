@@ -81,7 +81,12 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
       with Android Studio — point `JAVA_HOME` at
       `C:\Program Files\Android\Android Studio\jbr` first. See the header
       comment in `vitest.rules.config.ts`.
-- [ ] CI
+- [x] **CI** — `.github/workflows/ci.yml`. Two jobs: typecheck + lint + unit
+      tests + production build, and a separate rules job with JDK 21 for the
+      emulator. The rules job is the one that matters — a tenant leak is the bug
+      that ends this product, so its suite runs in CI rather than being dropped
+      for being inconvenient. Uses `npm ci`, so CI cannot silently test a
+      different dependency tree than the one that ships.
 
 ### Phase 1 — MVP frontend (live read-only backend)
 
@@ -291,10 +296,34 @@ real pre-existing violations**. Fixed by moving genuinely shared code to
 (`FormRenderer` + `fieldComponents`, which ADR-012 always described as the
 React counterpart to the pure `core/forms`).
 
-### Phase 3
-Several items **cannot** be built on Spark — webhooks, a public REST API,
-enterprise SSO, Slack/Discord delivery and AI review all need a server to hold a
-secret or receive an inbound request. They are blocked on billing, not effort.
+### Phase 3 — blocked on billing, not effort
+
+Webhooks, a public REST API, enterprise SSO, Slack/Discord delivery and AI
+review all need a server to hold a secret or receive an inbound request. Spark
+has no Cloud Functions, so none of them can exist client-side. Webhooks are the
+clearest case: the signature that proves a request came from Forge needs a
+secret the browser cannot hold, and an *unsigned* webhook is one anybody can
+forge — worse than none.
+
+**`functions/` now exists**, written and waiting. `cd functions && npm install
+&& npm run deploy` the day billing is on. **It has never run** — treat every
+line as unverified until it has executed once against a real project.
+
+| Function | Retires / unblocks |
+|---|---|
+| `onRegistrationWrite` · `onSubmissionWrite` | ADR-019 — client-incremented counters. Uses `count()` aggregation rather than increments, so the number is *derived* and cannot drift. |
+| `onScoreWrite` | Stale leaderboards (SPEC_SCORING §4). **This is the function that makes ranks move.** |
+| `dispatchWebhook` | Phase 3 signed webhooks |
+
+**Before deploying, two things:**
+1. `onScoreWrite` duplicates the aggregation in `core/judging/aggregate.ts`
+   because a Functions package cannot reach into `src/`. If the two disagree, a
+   participant sees one number and the board shows another. Extract
+   `core/judging` into a shared workspace package, or add a test that runs both
+   over one fixture.
+2. **Tighten the rules back.** `leaderboard` and `certificates` return to
+   `write: if false`, and the challenge rule drops its `counters` hatch. Those
+   relaxations exist only because there was no server.
 
 **All four pure engines named in CLAUDE.md hard rule 8 now exist and are tested:**
 `core/forms` (86) · `core/workflow` (49) · `core/rbac` (44) · `core/judging` (32).
@@ -309,11 +338,15 @@ secret or receive an inbound request. They are blocked on billing, not effort.
      `OWNER_EMAIL=you@gmail.com npm run seed`. This needs a service-account key
      at `./serviceAccountKey.json` — the Admin SDK has no other credential, and
      there is none in the repo (correctly).
-2. **CI** (Phase 0.7). `npm run verify` runs typecheck + lint + unit tests
-   already; add a workflow that also runs `npm run test:rules` on a JDK 21
-   runner — no longer a blocked problem.
-3. **Phase 2.** Every Phase 0 and Phase 1 item is now done. Workflow designer,
-   teams, blind judging, CSV export and public org pages are the next block.
+2. **Decide on Blaze.** Phases 0–2 are complete; everything still outstanding is
+   downstream of this one choice. Enabling it lets you deploy `functions/`,
+   which retires ADR-019 and ADR-022 and makes leaderboards live — then tighten
+   the two relaxed rules back to `write: if false`.
+3. **Three console actions only you can do**, none of which block the branch:
+   rotate the service-account key exposed on 2026-07-29, add the Vercel env vars
+   and authorized domain, and — *only if real customer data will live in this
+   project* — delete `isDemoOrg`/`demoReadable` (ADR-016). While it is a demo,
+   the world-readable org is the "see demo data" feature, not a leak.
 
 ## 4. Open questions (need a human decision)
 
