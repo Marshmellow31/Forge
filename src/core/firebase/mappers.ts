@@ -35,6 +35,7 @@ export const toOrg = (d: OrgDoc): Org => ({
   type: d.type,
   logoColor: d.logoColor,
   initials: d.initials,
+  logoUrl: d.logoUrl ?? '',
   memberCount: d.memberCount,
   challengeCount: d.challengeCount,
   plan: d.plan,

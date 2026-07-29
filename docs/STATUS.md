@@ -279,9 +279,29 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
       else is described against, and letting an org redefine "Judge" would make
       every audit entry and support conversation ambiguous.
 
+- [x] **Organization logos from Drive** (`shared/ui/OrgLogo.tsx`) — same parser
+      as challenge covers, so "paste a Drive link" means one thing everywhere.
+      Falls back to initials on the brand colour, which is the design rather
+      than a placeholder. Renders with `contain`, not `cover`: a photo crops
+      well, a mark does not.
+
 **Phase 2 is now complete** apart from the offline sync queue, which
 `core/sync` documents as deliberately delegated to the Firestore SDK's own
 persistence rather than reimplemented on Dexie.
+
+### Where Google Drive images appear (ADR-017)
+
+One parser, `core/drive/links.ts`, behind three surfaces:
+
+| Surface | Control |
+|---|---|
+| **Challenge cover / event photo** | Challenge editor → Cover tab, with a live preview *and* a card preview |
+| **Organization logo** | Create organization → Logo |
+| **Participant file answers** | The `driveLink` field type, and the submission screen's "your work" |
+
+All four accept a Drive share link or a plain image URL, warn on the
+`/u/0/`-style links that usually are not shared, and degrade to a gradient or
+initials rather than a broken-image box.
 
 **Architecture fix found while doing this.** `PublicOrgPage` needed
 `ChallengeCard`, which lived in `modules/challenges` — a module importing

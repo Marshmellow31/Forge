@@ -48,6 +48,8 @@ export interface OrgDoc extends BaseDoc {
   ownerId: string;
   logoColor: string;
   initials: string;
+  /** Drive share link or image URL. Absent falls back to initials. */
+  logoUrl?: string;
   memberCount: number;
   challengeCount: number;
   plan: 'free' | 'pro' | 'enterprise';

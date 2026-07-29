@@ -4,6 +4,7 @@ import {
   Divider, FormControlLabel, Stack, TextField, Typography,
 } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
+import { OrgLogo } from '@shared/ui/OrgLogo';
 import { QueryBoundary } from '@shared/ui/QueryBoundary';
 import { PageTitle, Eyebrow, Tag, panelSx, containerSx, Num } from '@shared/ui/primitives';
 import { useOrg, useMembers, useChallenges, useRoles } from '@core/firebase/hooks';
@@ -56,15 +57,7 @@ export default function Settings() {
         <Box sx={{ ...panelSx, mb: 3 }}>
           <Eyebrow>Organization</Eyebrow>
           <Stack direction="row" alignItems="center" gap={2} sx={{ mt: 2, mb: 3 }}>
-            <Box
-              sx={{
-                width: 56, height: 56, flex: 'none', borderRadius: '18px',
-                background: c.inverse, color: c.primary,
-                display: 'grid', placeItems: 'center', fontSize: 22, fontWeight: 800,
-              }}
-            >
-              {org?.initials ?? '—'}
-            </Box>
+            <OrgLogo logoUrl={org?.logoUrl} initials={org?.initials ?? '—'} size={56} radius={18} />
             <Box sx={{ minWidth: 0 }}>
               <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: '-.02em' }}>
                 {org?.name ?? 'Unknown organization'}

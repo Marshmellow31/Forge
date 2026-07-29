@@ -20,6 +20,12 @@ export interface Org {
   type: string;
   logoColor: string;
   initials: string;
+  /**
+   * A Drive share link or plain image URL, resolved by `core/drive`.
+   * Absent falls back to `initials` on `logoColor` — a deliberate design, not a
+   * placeholder, so an organization with no logo still looks finished.
+   */
+  logoUrl?: string;
   memberCount: number;
   challengeCount: number;
   plan: 'free' | 'pro' | 'enterprise';

@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Button, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
+import { OrgLogo } from '@shared/ui/OrgLogo';
+import { DriveLinkInput } from '@shared/ui/DriveLinkInput';
 import { PageTitle, Eyebrow, panelSx, containerSx } from '@shared/ui/primitives';
 import { useCreateOrganization } from '@core/firebase/mutations';
 import { useAuth } from '@core/auth';
@@ -40,6 +42,7 @@ export default function CreateOrganization() {
   const [slug, setSlug] = useState('');
   const [type, setType] = useState<(typeof TYPES)[number]['value']>('education');
   const [description, setDescription] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
 
   const effectiveSlug = slug || slugify(name);
   const orgId = useMemo(
@@ -54,7 +57,14 @@ export default function CreateOrganization() {
   const submit = async () => {
     if (problems.length > 0 || !user) return;
     await create.mutateAsync({
-      input: { id: orgId, name: name.trim(), slug: effectiveSlug, type, description: description.trim() },
+      input: {
+        id: orgId,
+        name: name.trim(),
+        slug: effectiveSlug,
+        type,
+        description: description.trim(),
+        logoUrl: logoUrl.trim(),
+      },
       user: {
         uid: user.uid,
         email: user.email,
@@ -122,6 +132,28 @@ export default function CreateOrganization() {
           onChange={(e) => setDescription(e.target.value)}
           helperText="Optional. Shown on your public organization page."
         />
+
+        <Box>
+          <Stack direction="row" alignItems="center" gap={2} sx={{ mb: 1.5 }}>
+            <OrgLogo
+              logoUrl={logoUrl}
+              initials={(name.split(/\s+/).map((w) => w[0]).join('') || 'F').slice(0, 2).toUpperCase()}
+              size={56}
+            />
+            <Typography sx={{ fontSize: 13, color: c.inkMuted, lineHeight: 1.6 }}>
+              <b>Logo</b> — optional. Paste a Google Drive share link or any image URL. Without
+              one you get your initials on the brand colour, which is a finished look rather than
+              a placeholder.
+            </Typography>
+          </Stack>
+          <DriveLinkInput
+            value={logoUrl}
+            onChange={setLogoUrl}
+            purpose="image"
+            allowPlainUrl
+            label="Logo link"
+          />
+        </Box>
       </Stack>
 
       <Box sx={{ ...containerSx, mt: 3, p: 2.25 }}>

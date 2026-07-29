@@ -399,6 +399,8 @@ export interface OrgInput {
   slug: string;
   type: 'education' | 'company' | 'community' | 'creator' | 'nonprofit' | 'other';
   description: string;
+  /** Drive share link or image URL; empty falls back to initials. */
+  logoUrl?: string;
 }
 
 /**
@@ -435,6 +437,7 @@ export async function writeOrganization(input: OrgInput, user: {
     ownerId: user.uid,
     logoColor: '#241A00',
     initials: input.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase(),
+    logoUrl: input.logoUrl ?? '',
     memberCount: 1,
     challengeCount: 0,
     plan: 'free',

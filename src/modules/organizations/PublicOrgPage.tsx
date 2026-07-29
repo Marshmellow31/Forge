@@ -4,6 +4,7 @@ import { Icon } from '@shared/ui/Icon';
 import { QueryBoundary } from '@shared/ui/QueryBoundary';
 import { Blobs, EmptyState, Eyebrow, Num, StatTile } from '@shared/ui/primitives';
 import { ChallengeCard } from '@shared/ui/ChallengeCard';
+import { OrgLogo } from '@shared/ui/OrgLogo';
 import { useOrg, useChallenges } from '@core/firebase/hooks';
 import { c, radius } from '@shared/design/tokens';
 
@@ -78,15 +79,7 @@ export default function PublicOrgPage() {
               >
                 <Blobs variant="hero" />
                 <Stack direction="row" alignItems="center" gap={2.5} sx={{ position: 'relative' }}>
-                  <Box
-                    sx={{
-                      width: 72, height: 72, flex: 'none', borderRadius: '22px',
-                      background: c.inverse, color: c.primary,
-                      display: 'grid', placeItems: 'center', fontSize: 28, fontWeight: 800,
-                    }}
-                  >
-                    {org.initials}
-                  </Box>
+                  <OrgLogo logoUrl={org.logoUrl} initials={org.initials} size={72} radius={22} />
                   <Box sx={{ minWidth: 0 }}>
                     <Eyebrow>{org.type}</Eyebrow>
                     <Typography sx={{ fontSize: 'clamp(26px, 3.6vw, 40px)', fontWeight: 700, letterSpacing: '-.03em', lineHeight: 1.1 }}>
