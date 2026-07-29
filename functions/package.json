@@ -8,6 +8,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "$comment_verify": "Emulator verification lives in the ROOT package.json as `npm run test:functions`, because that is where firebase.json and the firebase-tools binary are.",
     "deploy": "npm run build && firebase deploy --only functions",
     "logs": "firebase functions:log"
   },

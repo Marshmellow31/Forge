@@ -84,3 +84,28 @@ jobs:
 
       - name: Rules tests
         run: npm run test:rules
+
+  functions:
+    name: Cloud Functions (emulator)
+    runs-on: ubuntu-latest
+    # These cannot be deployed on the Spark plan, so without this job they would
+    # only ever be typechecked. The emulator has no plan restriction, so it is
+    # the only place their triggers can be proven to fire before billing is on.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - run: npm ci
+      - run: npm --prefix functions ci
+
+      - name: Function trigger tests
+        run: npm run test:functions

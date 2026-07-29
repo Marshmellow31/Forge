@@ -30,7 +30,22 @@ the tests prove the file, not what Firebase is currently enforcing.
    Copy the `firebaseConfig` values.
 
 The Spark (free) plan covers all of this. Cloud Functions would need Blaze, which
-is why none are used yet — see "What is not built" below.
+is why none are *deployed* yet — see "What is not built" below.
+
+They are written and verified, though. Spark blocks deploying functions; it does
+not block the emulator, so `npm run test:functions` runs them locally and asserts
+what their triggers write. The day you enable Blaze:
+
+```bash
+npm --prefix functions install && npm --prefix functions run deploy
+```
+
+Then tighten `firestore.rules` back: `leaderboard` and `certificates` return to
+`write: if false`, and the challenge-update rule drops its `counters` hatch.
+
+⚠️ `firebase.json` carries a `functions` block so the emulator can load them, so
+a bare `firebase deploy` will try to deploy functions and **fail on Spark**.
+Deploy rules with `npm run rules:deploy` (`--only firestore:rules,firestore:indexes`).
 
 ## 2. Configure locally
 

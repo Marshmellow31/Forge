@@ -1,13 +1,19 @@
 /**
  * Cloud Functions for Forge.
  *
- * ⚠️  **NOT DEPLOYED. NOT EXECUTED. NOT TESTED.**
+ * ⚠️  **NOT DEPLOYED — but executed and tested.**
  *
  * The project is on the Spark plan, which has no Cloud Functions, so none of
- * this has ever run. It is written and waiting: `cd functions && npm install &&
- * npm run deploy` the day billing is enabled. Treat every line as unverified
- * until it has run once against a real project — the shapes match
- * `src/core/firebase/types.ts`, but that is a promise, not a proof.
+ * this has run *in production*. It is written and waiting: `npm --prefix
+ * functions run deploy` the day billing is enabled.
+ *
+ * The emulator, however, has no plan restriction, and that is where these are
+ * verified: `npm run test:functions` starts the Firestore and
+ * Functions emulators, writes real documents, and asserts what each trigger
+ * wrote (see `../verify.mjs`). Every trigger below fires and passes there, so
+ * "compiles clean" is no longer the only evidence. What the emulator cannot
+ * prove is production-only behaviour: IAM, region placement, cold-start limits,
+ * and outbound network egress (which Spark blocks and `dispatchWebhook` needs).
  *
  * Each function here either **retires a documented trade-off** or **unblocks a
  * Phase 3 feature that cannot exist client-side**:
@@ -17,7 +23,6 @@
  * | `onRegistrationWrite` | ADR-019 — client-incremented counters             |
  * | `onSubmissionWrite`   | ADR-019 — submission counter                      |
  * | `onScoreWrite`        | Stale leaderboards; SPEC_SCORING §4               |
- * | `onResultsPublished`  | ADR-022 — makes publishing atomic and audited     |
  * | `dispatchWebhook`     | Phase 3 — signed webhooks (needs a server secret) |
  *
  * After deploying, go and **tighten the rules back**: `leaderboard` and
@@ -76,9 +81,20 @@ export const onSubmissionWrite = onDocumentWritten(
     const col = db.collection(`organizations/${orgId}/challenges/${cid}/submissions`);
     // Drafts are not submissions. Counting them would tell an organiser that
     // work has arrived when it has not.
-    const snap = await col.where('status', '!=', 'draft').count().get();
+    //
+    // Total-minus-drafts rather than `where('status', '!=', 'draft')`: a `!=`
+    // filter silently excludes documents that have no `status` field at all, so
+    // any submission written without one would vanish from the count. Two
+    // aggregations cost marginally more and cannot under-report.
+    const [total, drafts] = await Promise.all([
+      col.count().get(),
+      col.where('status', '==', 'draft').count().get(),
+    ]);
     await db.doc(`organizations/${orgId}/challenges/${cid}`).set(
-      { counters: { submissions: snap.data().count }, updatedAt: FieldValue.serverTimestamp() },
+      {
+        counters: { submissions: total.data().count - drafts.data().count },
+        updatedAt: FieldValue.serverTimestamp(),
+      },
       { merge: true },
     );
   },

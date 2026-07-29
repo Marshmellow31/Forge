@@ -16,7 +16,13 @@ import boundaries from 'eslint-plugin-boundaries';
  * `firebase/firestore` import from a component.
  */
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'coverage/**', '*.config.js', 'tsconfig.tsbuildinfo'] },
+  // `functions/lib/**` is tsc output — CommonJS, not ours to lint.
+  {
+    ignores: [
+      'dist/**', 'node_modules/**', 'coverage/**', '*.config.js',
+      'tsconfig.tsbuildinfo', 'functions/lib/**',
+    ],
+  },
 
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -178,7 +184,7 @@ export default tseslint.config(
   },
 
   {
-    files: ['**/*.test.{ts,tsx}', 'tests/**/*.ts', 'scripts/**/*.ts'],
+    files: ['**/*.test.{ts,tsx}', 'tests/**/*.ts', 'scripts/**/*.ts', 'functions/**/*.{ts,mjs}'],
     languageOptions: { globals: { ...globals.node } },
     rules: {
       'boundaries/element-types': 'off',

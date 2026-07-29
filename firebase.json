@@ -1,5 +1,10 @@
 {
-  "$comment": "The `functions` block is intentionally absent. functions/ exists and is written, but deploying it needs the Blaze plan — adding the block here would make `firebase deploy` fail on Spark. Uncomment it when billing is enabled.",
+  "$comment": "The `functions` block is present so the emulator can RUN functions/ — that is how they get verified without the Blaze plan. It does mean a bare `firebase deploy` would try to deploy functions and fail on Spark, so always deploy rules with `firebase deploy --only firestore:rules` (see DEPLOY.md). The day billing is on, `firebase deploy --only functions` needs no change here.",
+  "functions": {
+    "source": "functions",
+    "codebase": "default",
+    "predeploy": ["npm --prefix functions run build"]
+  },
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
@@ -7,6 +12,7 @@
   "emulators": {
     "auth": { "port": 9099 },
     "firestore": { "port": 8080 },
+    "functions": { "port": 5001 },
     "ui": { "enabled": true }
   }
 }

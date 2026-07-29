@@ -331,9 +331,41 @@ is delivered yet, because a webhook that silently never fires is worse than one
 that admits it is not connected. That is the maximum Phase 3 progress available
 without a server, and it means enabling Blaze is a deploy rather than a build.
 
-**`functions/` now exists**, written and waiting. `cd functions && npm install
-&& npm run deploy` the day billing is on. **It has never run** — treat every
-line as unverified until it has executed once against a real project.
+**`functions/` now exists and now *runs*.** `npm --prefix functions run deploy`
+the day billing is on.
+
+It is no longer unverified. The Spark plan blocks *deploying* Cloud Functions;
+it does not block the **emulator**, which has no plan restriction. So
+`npm run test:functions` starts the Firestore and Functions emulators, writes
+real documents, and asserts what each trigger actually wrote
+(`functions/verify.mjs`, 9 assertions). All three Firestore triggers fire and
+pass. This runs in CI as a third job (`Cloud Functions (emulator)`), so they
+cannot rot while waiting for billing.
+
+Two real defects only came out once the code executed:
+
+* **`onSubmissionWrite` under-counted.** It used
+  `where('status', '!=', 'draft').count()`, and a `!=` filter silently excludes
+  documents that have **no `status` field at all** — so a submission written
+  without one vanished from the organiser's count. Now total-minus-drafts (two
+  aggregations), with a regression assertion for exactly that document shape.
+* **`onResultsPublished` was documented but did not exist** — it was a row in
+  the file's own header table with no function under it. Row removed; ADR-022
+  stays open rather than looking closed.
+
+What the emulator still cannot prove: IAM, region placement, cold-start limits,
+and **outbound network egress** — which Spark blocks and `dispatchWebhook`
+needs. So webhook *delivery* remains the one Phase 3 item with no local proof.
+
+`firebase.json` now carries a `functions` block (the emulator needs it to load
+them). That means a bare `firebase deploy` would try to deploy functions and fail
+on Spark — always use `firebase deploy --only firestore:rules`, which is what
+`npm run rules:deploy` does.
+
+**`firebase-tools` is now a devDependency.** `test:rules` and `test:functions`
+both shell out to `firebase`, and it was only ever resolving from a global
+install — meaning the CI rules job would have failed on a clean runner. It
+resolves from `node_modules/.bin` now.
 
 | Function | Retires / unblocks |
 |---|---|
@@ -382,8 +414,9 @@ app. It is now a link to `/o/{slug}`.
      there is none in the repo (correctly).
 2. **Decide on Blaze.** Phases 0–2 are complete; everything still outstanding is
    downstream of this one choice. Enabling it lets you deploy `functions/`,
-   which retires ADR-019 and ADR-022 and makes leaderboards live — then tighten
-   the two relaxed rules back to `write: if false`.
+   which retires ADR-019 and makes leaderboards live — then tighten the two
+   relaxed rules back to `write: if false`. The functions are emulator-verified,
+   so this is a deploy, not a build.
 3. **Three console actions only you can do**, none of which block the branch:
    rotate the service-account key exposed on 2026-07-29, add the Vercel env vars
    and authorized domain, and — *only if real customer data will live in this
