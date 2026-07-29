@@ -4,7 +4,7 @@ import { Icon } from '@shared/ui/Icon';
 import { useChallengeBySlug, useOrg, useWorkspaces, useFormSchemas, useRubric } from '@core/firebase/hooks';
 import { EmptyState, Blobs, Tag, ListSkeleton } from '@shared/ui/primitives';
 import { allFields } from '@core/forms/compiler';
-import { c, radius, coverFor, mono, shadow } from '@app/tokens';
+import { c, radius, coverFor, mono, shadow } from '@shared/design/tokens';
 
 const STAGE_LOOK = {
   done: { bg: c.success, fg: c.successInk, border: 'transparent', icon: 'check', fill: true },

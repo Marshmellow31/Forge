@@ -27,6 +27,19 @@ export const qk = {
   leaderboard: (orgId: string, cid: string) =>
     ['org', orgId, 'challenge', cid, 'leaderboard'] as const,
 
+  /** The signed-in user's membership, which is what permissions resolve from. */
+  member: (orgId: string, userId: string) => ['org', orgId, 'member', userId] as const,
+  roles: (orgId: string) => ['org', orgId, 'roles'] as const,
+  invites: (orgId: string) => ['org', orgId, 'invites'] as const,
+
   user: (userId: string) => ['user', userId] as const,
   certificates: () => ['certificates'] as const,
+
+  /** In-app notification inbox, per user per org. */
+  notifications: (orgId: string, userId: string) =>
+    ['org', orgId, 'notifications', userId] as const,
+
+  /** Every registration this user holds, across challenges. */
+  myRegistrations: (orgId: string, userId: string) =>
+    ['org', orgId, 'myRegistrations', userId] as const,
 } as const;

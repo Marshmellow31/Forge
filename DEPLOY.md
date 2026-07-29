@@ -3,10 +3,17 @@
 Five steps. Steps 1–3 need your Google account, so they are yours to do; nothing
 in this repo can create a Firebase project on your behalf.
 
-**Everything below is unverified against a live project** — no Firebase project
-existed while this was written, and the Firestore emulator could not run locally
-(it needs Java 21+). The code typechecks and builds; the rules and seed script
-have not executed. Expect to hit at least one thing on the first run.
+Steps 1–3 have been run against the live project `forge-4d40a`.
+
+The security rules are covered by **48 emulator tests that pass**
+(`npm run test:rules`). The emulator needs **JDK 21**; if `java -version` says 8,
+Android Studio bundles a modern one — point `JAVA_HOME` at
+`C:\Program Files\Android\Android Studio\jbr` first.
+
+Rules and indexes were **deployed to `forge-4d40a` on 2026-07-29**, and all
+reads were re-verified against them afterwards. Re-run `npm run rules:deploy`
+after any further change to `firestore.rules` or `firestore.indexes.json` —
+the tests prove the file, not what Firebase is currently enforcing.
 
 ---
 
@@ -51,13 +58,24 @@ Then get an admin key for the seed script:
 > Never commit it, never paste it into a chat, never put it in a Vercel env var.
 
 ```bash
-npm run seed
+OWNER_EMAIL=you@gmail.com npm run seed
 ```
 
 This writes the demo organization `org_demo` — challenges, form schemas,
-registrations, submissions, rubric, leaderboard pages, members, badges,
+registrations, submissions, rubric, leaderboard pages, members, roles, badges,
 certificates and audit log — from `src/mock/data.ts`. It is idempotent: fixed
 document ids, so re-running overwrites rather than duplicating.
+
+> **`OWNER_EMAIL` is not optional in practice.** The seeded members are fixture
+> rows whose document ids are `m0`, `m1`, … — no real Google account will ever
+> match one, so without this every admin screen is correctly read-only and you
+> cannot create or edit a challenge.
+>
+> Setting it writes a pending **owner** invite for that address. Sign in with
+> that exact Google account and the invite is redeemed on first load, granting
+> full control. The security rules verify the email is *verified* and that the
+> roles claimed match the invite exactly, so this is not a backdoor — see
+> ADR-020. Invite anyone else from **Organization → Members**.
 
 Verify locally before deploying:
 
@@ -104,20 +122,25 @@ domain**, and add your `*.vercel.app` domain. Sign-in fails with
 
 Honest list, so nothing here surprises you in front of an audience:
 
-- **No Cloud Functions.** Denormalized values (`challenge.counters`,
-  `user.stats`, leaderboard pages) are *seeded*, not maintained. They will not
-  update if you change data. DATA_MODEL.md §4 specifies Functions as their owner.
-- **The app reads; it does not write.** Registration submit, score submit and
-  schema publish all render their success dialogs without persisting. The write
-  paths, offline queue (`core/sync`) and versioned schema publishing are not
-  implemented.
-- **No Drive uploads.** File fields simulate an upload. The real pipeline mints a
-  resumable session server-side, which needs Functions (Blaze).
+- **No Cloud Functions**, because the project is on Spark by choice. Consequences:
+  `user.stats` and leaderboard pages are *seeded*, not maintained, so ranks do
+  not move as scores land. `challenge.counters` **are** maintained, by a bounded
+  client increment (ADR-019). Result publishing (ROADMAP 1.15) has no owner.
+- **Result publishing is idempotent, not atomic** (ADR-022). A mid-flight
+  failure leaves a partial publish; re-running converges rather than
+  double-awarding, because every document id is derived. A Cloud Function would
+  make it atomic.
+- **No organization creation** (1.2). A transactional write that would orphan
+  data if half-completed. The demo runs on one seeded org, so nothing is blocked.
+- **No resumable Drive upload.** Files are referenced by pasted share link
+  (ADR-017) — deliberate, not missing. The resumable pipeline needs Blaze.
 - **The judge queue is not assignment-driven.** It shows submissions needing
   reviews on the first judging challenge, rather than reviews assigned to you.
-- **Rules have no tests.** DATA_MODEL.md §6 requires emulator tests proving
-  cross-tenant reads fail, and Phase 0 lists them as a deliverable. They do not
-  exist, and the emulator could not run here to write them. **Do not treat the
-  current rules as proven.**
-- **ADR-016 is demo scaffolding.** Guest sign-in self-issues a read-only
-  membership in one org. Remove it before a second real tenant exists.
+- **Push notifications are out of scope.** The in-app inbox is complete and is
+  the source of truth; FCM was deliberately not built.
+- **These Phase 3 items cannot be built on Spark at all:** webhooks, a public
+  REST API, enterprise SSO, Slack/Discord delivery, AI review assistance. Each
+  needs a server to hold a secret or receive an inbound request.
+- **ADR-016 is demo scaffolding.** The demo org is world-readable and guest
+  sign-in self-issues a read-only membership. Remove both before a second real
+  tenant exists.

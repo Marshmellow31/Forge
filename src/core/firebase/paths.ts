@@ -6,7 +6,7 @@ import { db } from './app';
 import type {
   OrgDoc, ChallengeDoc, RegistrationDoc, SubmissionDoc, ReviewDoc,
   LeaderboardPageDoc, FormSchemaDoc, MemberDoc, AuditLogDoc, WorkspaceDoc,
-  UserDoc, CertificateDoc, BadgeDoc, RubricDoc,
+  UserDoc, CertificateDoc, BadgeDoc, RubricDoc, RoleDoc, InviteDoc, NotificationDoc,
 } from './types';
 
 /**
@@ -62,6 +62,21 @@ export const membersCol = (orgId: string) =>
   typedCollection<MemberDoc>(`${orgPath(orgId)}/members`);
 export const memberDoc = (orgId: string, userId: string) =>
   typedDoc<MemberDoc>(`${orgPath(orgId)}/members`, userId);
+
+export const rolesCol = (orgId: string) =>
+  typedCollection<RoleDoc>(`${orgPath(orgId)}/roles`);
+
+/** Invites are keyed by lowercased email so redemption needs no query. */
+export const invitesCol = (orgId: string) =>
+  typedCollection<InviteDoc>(`${orgPath(orgId)}/invites`);
+export const inviteDoc = (orgId: string, email: string) =>
+  typedDoc<InviteDoc>(`${orgPath(orgId)}/invites`, email.trim().toLowerCase());
+
+/** Per-user inbox: the path itself scopes a read to its owner. */
+export const notificationsCol = (orgId: string, userId: string) =>
+  typedCollection<NotificationDoc>(`${orgPath(orgId)}/members/${userId}/notifications`);
+export const notificationDoc = (orgId: string, userId: string, id: string) =>
+  typedDoc<NotificationDoc>(`${orgPath(orgId)}/members/${userId}/notifications`, id);
 
 export const formSchemasCol = (orgId: string) =>
   typedCollection<FormSchemaDoc>(`${orgPath(orgId)}/formSchemas`);

@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Box, Button, Stack, Tab, Tabs, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { useChallenges, useWorkspaces } from '@core/firebase/hooks';
 import { QueryBoundary } from '@shared/ui/QueryBoundary';
 import { PageTitle, EmptyState, StatusPill, TableHead, tableRowSx, Num } from '@shared/ui/primitives';
-import { c, radius, coverFor } from '@app/tokens';
+import { CoverImage } from '@shared/ui/CoverImage';
+import { c, radius } from '@shared/design/tokens';
 
 const TABS = ['All', 'draft', 'published', 'running', 'judging', 'completed'];
 
@@ -26,7 +27,13 @@ export default function ChallengesList() {
     <>
       <Stack direction="row" alignItems="flex-end" justifyContent="space-between" flexWrap="wrap" gap={2} sx={{ mb: 3 }}>
         <PageTitle>Challenges</PageTitle>
-        <Button variant="contained" sx={{ height: 52, mb: 2 }} startIcon={<Icon name="add" size={20} />}>
+        <Button
+          component={Link}
+          to="/org/challenges/new"
+          variant="contained"
+          sx={{ height: 52, mb: 2 }}
+          startIcon={<Icon name="add" size={20} />}
+        >
           New challenge
         </Button>
       </Stack>
@@ -39,7 +46,23 @@ export default function ChallengesList() {
 
       <QueryBoundary isLoading={isLoading} error={error}>
       {rows.length === 0 ? (
-        <EmptyState icon="emoji_events" title="No challenges here" body="Nothing in this state yet." />
+        <EmptyState
+          icon="emoji_events"
+          title={tab === 0 ? 'No challenges yet' : 'Nothing in this state'}
+          body={tab === 0
+            ? 'Create your first challenge — you can save it as a draft and keep editing.'
+            : `No challenge is currently ${TABS[tab]}.`}
+          action={tab === 0 ? (
+            <Button
+              component={Link}
+              to="/org/challenges/new"
+              variant="contained"
+              startIcon={<Icon name="add" size={20} />}
+            >
+              New challenge
+            </Button>
+          ) : undefined}
+        />
       ) : (
         <Box sx={{ borderRadius: `${radius.panel}px`, background: c.surfaceCard, border: `1px solid ${c.outline}`, overflow: 'hidden' }}>
           <TableHead
@@ -59,7 +82,9 @@ export default function ChallengesList() {
                 onClick={() => navigate(`/org/challenges/${ch.id}`)}
                 sx={{ ...tableRowSx, cursor: 'pointer' }}
               >
-                <Box sx={{ width: 40, height: 40, flex: 'none', borderRadius: '12px', background: coverFor(ch.category) }} />
+                <Box sx={{ width: 40, height: 40, flex: 'none' }}>
+                  <CoverImage cover={ch.cover} category={ch.category} height={40} width={80} radius={12} />
+                </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography noWrap sx={{ fontSize: 15, fontWeight: 600 }}>{ch.title}</Typography>
                   <Typography sx={{ fontSize: 12, color: c.inkFaint }}>

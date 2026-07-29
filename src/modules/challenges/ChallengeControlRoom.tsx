@@ -12,7 +12,7 @@ import {
   StatTile, EmptyState, PersonCell, ScoreCell, StatusPill, SectionLabel, TableHead,
   tableRowSx, Num, Tag, ProgressBar,
 } from '@shared/ui/primitives';
-import { c, radius, mono } from '@app/tokens';
+import { c, radius, mono } from '@shared/design/tokens';
 
 const TABS = ['Overview', 'Registrations', 'Submissions', 'Judging', 'Leaderboard'];
 
@@ -60,11 +60,24 @@ export default function ChallengeControlRoom() {
           </Typography>
         </Box>
         <Stack direction="row" gap={1.25} flexWrap="wrap">
+          <Button
+            variant="outlined"
+            component={Link}
+            to={`/org/challenges/${ch.id}/edit`}
+            startIcon={<Icon name="edit" size={20} />}
+          >
+            Edit challenge
+          </Button>
           <Button variant="outlined" component={Link} to={`/org/challenges/${ch.id}/form`} startIcon={<Icon name="dynamic_form" size={20} />}>
             Form builder
           </Button>
           <Button variant="outlined" component={Link} to={`/c/${ch.slug}`}>Public page</Button>
-          <Button sx={{ background: c.inverse, color: c.onInverse, '&:hover': { background: c.inverse } }}>
+          <Button
+            component={Link}
+            to={`/org/challenges/${ch.id}/publish`}
+            startIcon={<Icon name="campaign" size={20} />}
+            sx={{ background: c.inverse, color: c.onInverse, '&:hover': { background: c.inverse } }}
+          >
             Publish results
           </Button>
         </Stack>

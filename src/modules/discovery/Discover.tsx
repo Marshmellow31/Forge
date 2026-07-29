@@ -6,7 +6,7 @@ import { useChallenges } from '@core/firebase/hooks';
 import { QueryBoundary } from '@shared/ui/QueryBoundary';
 import { ChallengeCard } from '@modules/challenges/components';
 import { PageTitle, EmptyState } from '@shared/ui/primitives';
-import { c, radius, ease } from '@app/tokens';
+import { c, radius, ease } from '@shared/design/tokens';
 
 /** S-03 — Discover. Filter chips are the design's primary control. */
 export default function Discover() {

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Box, Button, Stack, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { Hero, Tag, Num, liftSx } from '@shared/ui/primitives';
-import { c, radius } from '@app/tokens';
+import { c, radius } from '@shared/design/tokens';
 import { useBadges, useCertificates } from '@core/firebase/hooks';
 import { QueryBoundary } from '@shared/ui/QueryBoundary';
 

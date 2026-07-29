@@ -5,9 +5,9 @@ import {
   Hero, StatTile, SectionLabel, ProgressBar, StatusPill, EmptyState, liftSx,
 } from '@shared/ui/primitives';
 import { ChallengeCard, StageStepper } from '@modules/challenges/components';
-import { c, radius, ease } from '@app/tokens';
+import { c, radius, ease } from '@shared/design/tokens';
 import { useChallenges, useBadges, useCertificates, useCurrentUser } from '@core/firebase/hooks';
-import { useAuth } from '@app/providers/AppProviders';
+import { useAuth } from '@core/auth';
 
 /** The profile seeded into the index snapshot for the signed-out demo. */
 const DEMO_USER_ID = 'u_self';

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Box, Button, Stack, Tab, Tabs, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { PageTitle, StatusPill, EmptyState, Num, liftSx } from '@shared/ui/primitives';
-import { c, radius, coverFor } from '@app/tokens';
+import { c, radius, coverFor } from '@shared/design/tokens';
 import { useChallenges, useSubmissions } from '@core/firebase/hooks';
 import { QueryBoundary } from '@shared/ui/QueryBoundary';
 

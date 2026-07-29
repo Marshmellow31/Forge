@@ -1,58 +1,42 @@
-import { useEffect, useState, createContext, useContext, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { Box, CircularProgress } from '@mui/material';
-import { c } from '@app/tokens';
-import { onAuth, type AuthUser } from '@core/firebase/auth';
+import { c } from '@shared/design/tokens';
+import { AuthProvider } from '@core/auth';
 import { fetchIndexSnapshot, hydrateFromIndex } from '@core/firebase/snapshot';
+import { PwaPrompts } from '@shared/ui/PwaPrompts';
 
 /**
- * Defaults from CONVENTIONS.md §4, with `staleTime` raised well above the
- * documented 30 s.
+ * Composition root. Everything here is wiring; the behaviour lives in `core/`.
  *
- * The demo dataset is rebuilt by `npm run seed`, never by the running app, so
- * every refetch is a guaranteed-identical result billed as fresh document
- * reads. An hour of staleness costs nothing and removes almost all repeat
- * traffic. Restore 30 s when live writes land.
+ * `useAuth` used to be defined in this file, which forced every screen needing
+ * identity to import upwards from `modules/` into `app/` — the inversion the
+ * dependency rule exists to prevent. It now lives in `@core/auth`; this file
+ * only mounts it.
+ */
+
+/**
+ * Defaults from CONVENTIONS.md §4.
+ *
+ * `staleTime` is 5 minutes rather than the documented 30 s: reads are billed
+ * per document and this data changes on human timescales. It is no longer the
+ * one-hour setting used while the app was read-only — writes are live now, so a
+ * participant must see their own registration appear without a hard reload.
+ * Mutations invalidate the keys they touch, so correctness never depends on
+ * this number; only the cost of being briefly behind does.
  */
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60 * 60_000,
+      staleTime: 5 * 60_000,
       gcTime: 24 * 60 * 60_000,
       retry: 1,
       refetchOnWindowFocus: false,
       refetchOnMount: false,
-      refetchOnReconnect: false,
+      refetchOnReconnect: true,
     },
   },
 });
-
-const AuthContext = createContext<{ user: AuthUser | null }>({ user: null });
-export const useAuth = () => useContext(AuthContext);
-
-/**
- * Optional sign-in.
- *
- * The demo reads world-readable seeded data (ADR-016), so this must never
- * block: 700 viewers should not each mint a throwaway anonymous account, and
- * the app has to render even when Auth is not configured on the project.
- *
- * A signed-in user gets their own name in the shell; everyone else is a
- * viewer. Auth failures are swallowed deliberately — they are not fatal here.
- */
-function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-
-  useEffect(() => {
-    try {
-      return onAuth(setUser);
-    } catch {
-      return undefined; // Auth not configured; the demo does not need it.
-    }
-  }, []);
-
-  return <AuthContext.Provider value={{ user }}>{children}</AuthContext.Provider>;
-}
 
 /**
  * Pulls the pre-joined index snapshot once and seeds the whole query cache
@@ -61,7 +45,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
  *
  * If the snapshot is absent (an older seed, or a project seeded before this
  * existed) nothing breaks: the hooks fall through to their per-collection
- * queries, just more expensively.
+ * queries, just more expensively. So a missing snapshot never fails the app.
  */
 function SnapshotHydrator({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
@@ -84,7 +68,12 @@ function SnapshotHydrator({ children }: { children: ReactNode }) {
 
   if (!done) {
     return (
-      <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: c.surface }}>
+      <Box
+        sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: c.surface }}
+        role="status"
+        aria-live="polite"
+        aria-label="Loading Forge"
+      >
         <CircularProgress sx={{ color: c.accent }} />
       </Box>
     );
@@ -97,6 +86,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <SnapshotHydrator>{children}</SnapshotHydrator>
+        {/* Outside the hydrator: an update or install offer should not wait on
+            a Firestore read, and must still appear if that read fails. */}
+        <PwaPrompts />
       </AuthProvider>
     </QueryClientProvider>
   );

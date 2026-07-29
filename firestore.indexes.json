@@ -30,9 +30,18 @@
       ]
     },
     {
-      "$comment": "my registrations",
+      "$comment": "my registrations, within one challenge",
       "collectionGroup": "registrations",
       "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "$comment": "my registrations ACROSS challenges — ADR-018. Must be COLLECTION_GROUP: the COLLECTION-scoped index above does not serve a collectionGroup() query, and the query fails at runtime without this.",
+      "collectionGroup": "registrations",
+      "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
@@ -76,5 +85,15 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "$comment": "ADR-018. Firestore creates single-field indexes automatically, but only at COLLECTION scope. A collectionGroup() query filtering on one field needs the field explicitly indexed at COLLECTION_GROUP scope, which is what this override adds.",
+      "collectionGroup": "registrations",
+      "fieldPath": "userId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    }
+  ]
 }

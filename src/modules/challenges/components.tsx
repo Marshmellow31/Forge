@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom';
 import { Box, Stack, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
-import { c as t, radius, coverFor } from '@app/tokens';
+import { c as t, radius } from '@shared/design/tokens';
 import { liftSx as lift } from '@shared/ui/primitives';
+import { CoverImage } from '@shared/ui/CoverImage';
+import { resolveCoverUrl } from '@core/drive/links';
 import type { Challenge, Stage } from '@shared/types/domain';
 
 const STAGE_LOOK: Record<Stage['state'], { bg: string; fg: string; border: string; icon: string; fill: boolean; labelFg: string }> = {
@@ -46,6 +48,7 @@ export function StageStepper({ stages }: { stages: Stage[]; compact?: boolean })
 /** Challenge card with the design's tinted cover, blob and footer meta row. */
 export function ChallengeCard({ challenge, to }: { challenge: Challenge; to: string }) {
   const ch = challenge;
+  const hasPhoto = resolveCoverUrl(ch.cover) !== null;
   return (
     <Box
       component={Link}
@@ -62,18 +65,22 @@ export function ChallengeCard({ challenge, to }: { challenge: Challenge; to: str
         height: '100%',
       }}
     >
-      <Box sx={{ height: 112, position: 'relative', overflow: 'hidden', background: coverFor(ch.category) }}>
-        <Box
-          sx={{
-            position: 'absolute',
-            width: 160,
-            height: 150,
-            right: -46,
-            top: -56,
-            background: 'rgba(255,255,255,.32)',
-            borderRadius: '52% 48% 60% 40%/45% 55% 45% 55%',
-          }}
-        />
+      <CoverImage cover={ch.cover} category={ch.category} height={112} width={640} alt="">
+        {/* The decorative blob belongs to the gradient treatment; with a real
+            photo behind it, it would just be a smear. */}
+        {!hasPhoto && (
+          <Box
+            sx={{
+              position: 'absolute',
+              width: 160,
+              height: 150,
+              right: -46,
+              top: -56,
+              background: 'rgba(255,255,255,.32)',
+              borderRadius: '52% 48% 60% 40%/45% 55% 45% 55%',
+            }}
+          />
+        )}
         <Box
           component="span"
           sx={{
@@ -93,7 +100,7 @@ export function ChallengeCard({ challenge, to }: { challenge: Challenge; to: str
         >
           {ch.category}
         </Box>
-      </Box>
+      </CoverImage>
       <Box sx={{ p: '18px 20px 20px' }}>
         <Typography sx={{ fontSize: 16, fontWeight: 700, letterSpacing: '-.01em', mb: 1, lineHeight: 1.3 }}>
           {ch.title}

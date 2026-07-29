@@ -1,5 +1,5 @@
 import { createTheme } from '@mui/material/styles';
-import { c, radius, shadow, ease } from './tokens';
+import { c, radius, shadow, ease } from '@shared/design/tokens';
 
 /**
  * MUI theme derived from the Forge design tokens (Material Design 3 expressive,

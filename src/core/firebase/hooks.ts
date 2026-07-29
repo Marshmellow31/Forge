@@ -87,6 +87,35 @@ export const useCurrentUser = (userId: string | undefined) =>
     enabled: Boolean(userId),
   });
 
+export const useMember = (userId: string | undefined, orgId = demoOrgId()) =>
+  useQuery({
+    queryKey: qk.member(orgId, userId ?? ''),
+    queryFn: () => q.fetchMember(orgId, userId!),
+    enabled: Boolean(userId),
+  });
+
+export const useRoles = (orgId = demoOrgId()) =>
+  useQuery({ queryKey: qk.roles(orgId), queryFn: () => q.fetchRoles(orgId) });
+
+export const useInvites = (orgId = demoOrgId()) =>
+  useQuery({ queryKey: qk.invites(orgId), queryFn: () => q.fetchInvites(orgId) });
+
+export const useNotifications = (userId: string | undefined, orgId = demoOrgId()) =>
+  useQuery({
+    queryKey: qk.notifications(orgId, userId ?? ''),
+    queryFn: () => q.fetchNotifications(orgId, userId!),
+    enabled: Boolean(userId),
+    // The inbox is the one thing a person expects to be current.
+    staleTime: 60_000,
+  });
+
+export const useMyRegistrations = (userId: string | undefined, orgId = demoOrgId()) =>
+  useQuery({
+    queryKey: qk.myRegistrations(orgId, userId ?? ''),
+    queryFn: () => q.fetchMyRegistrations(orgId, userId!),
+    enabled: Boolean(userId),
+  });
+
 /**
  * Hydrates the four per-challenge collections from one pre-joined document.
  *

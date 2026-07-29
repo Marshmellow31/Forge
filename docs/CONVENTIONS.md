@@ -129,10 +129,10 @@ Rewritten 2026-07-29 when the Forge design system landed (ADR-015). The previous
 with a design specified entirely in inline styles; what follows is what the code
 actually does.
 
-* **`app/tokens.ts` is the only place a hex may be written.** Colour, radius,
+* **`shared/design/tokens.ts` is the only place a hex may be written.** Colour, radius,
   elevation, motion easing and the cover/status maps live there. A component that
   needs a new colour adds a token; it does not inline one.
-* **`app/theme.ts` derives the MUI theme from `tokens.ts` and nothing else.**
+* **`app/theme.ts` derives the MUI theme from `shared/design/tokens.ts` and nothing else.**
   Anything expressible as a theme default (button height, field fill, tab
   indicator) belongs there, not repeated per call site.
 * **MUI `Box`/`Stack` + `sx` own layout.** `sx` compiles to real classes, so it

@@ -67,8 +67,64 @@ export interface MemberDoc extends BaseDoc {
   roleIds: string[];
   /** Flattened for the rules fast path — see DATA_MODEL.md §6 `hasPerm`. */
   resolvedPermissions: string[];
+  /** Additive grants outside any role. SPEC_RBAC §1. */
+  directPermissions?: string[];
+  /** Grants that apply only within a workspace or challenge. SPEC_RBAC §5. */
+  scopedGrants?: Array<{
+    scope: { type: 'org' | 'workspace' | 'challenge'; id: string };
+    permissions: string[];
+  }>;
   status: 'invited' | 'active' | 'suspended';
   joinedAt: Timestamp | null;
+}
+
+export interface RoleDoc extends BaseDoc {
+  name: string;
+  description: string;
+  permissions: string[];
+  isSystem: boolean;
+}
+
+/**
+ * A pending invitation, keyed by lowercased email.
+ *
+ * This is how someone becomes an admin without a Cloud Function: an existing
+ * admin (or the seed script) writes the invite, and the invitee's first
+ * sign-in exchanges it for a membership. The security rules only permit that
+ * exchange when the invite's email matches the caller's verified token email
+ * and the roles claimed match the invite exactly — so the client chooses
+ * *nothing*, it merely redeems what was already granted.
+ */
+export interface InviteDoc extends BaseDoc {
+  email: string;
+  roleIds: string[];
+  resolvedPermissions: string[];
+  invitedBy: string;
+  status: 'pending' | 'accepted' | 'revoked';
+  acceptedBy: string | null;
+  acceptedAt: Timestamp | null;
+}
+
+/**
+ * In-app notification. Delivery is a Firestore read, not a push — the product
+ * decision (and the Spark plan) is that the inbox is the source of truth and
+ * push is an optional echo of it.
+ */
+export interface NotificationDoc extends BaseDoc {
+  userId: string;
+  type:
+    | 'registration.confirmed'
+    | 'submission.received'
+    | 'deadline.approaching'
+    | 'results.published'
+    | 'review.assigned'
+    | 'announcement';
+  title: string;
+  body: string;
+  /** In-app route to open. Never an external URL. */
+  link: string | null;
+  challengeId: string | null;
+  readAt: Timestamp | null;
 }
 
 export interface StageDoc {

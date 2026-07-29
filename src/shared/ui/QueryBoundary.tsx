@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Box, Stack } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
-import { c, radius } from '@app/tokens';
+import { c, radius } from '@shared/design/tokens';
 
 /**
  * The three states every remote read has. Screens render this instead of

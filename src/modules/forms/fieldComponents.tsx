@@ -6,11 +6,11 @@
  * switches on field.type.
  */
 import {
-  TextField, MenuItem, RadioGroup, Radio, FormControlLabel, Checkbox, Rating,
+  TextField, MenuItem, Checkbox, Rating,
   Stack, Box, Typography, Chip, Button, IconButton, Select, OutlinedInput,
 } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
-import { c as t, radius, ease } from '@app/tokens';
+import { c as t, radius, ease } from '@shared/design/tokens';
 import type { FieldType, FormField, FileRef } from '@core/forms/types';
 
 /** Label + help/error pair shared by the non-text field types. */

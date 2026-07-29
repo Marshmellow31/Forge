@@ -23,7 +23,9 @@ It is a **router**, not a spec. Load only the doc your task actually needs.
 | File uploads, Google Drive, providers | [docs/SPEC_STORAGE.md](docs/SPEC_STORAGE.md) |
 | Judging, rubrics, leaderboards, rewards, certificates | [docs/SPEC_SCORING.md](docs/SPEC_SCORING.md) |
 | Offline, sync queue, PWA | [docs/SPEC_OFFLINE.md](docs/SPEC_OFFLINE.md) |
-| Colour, spacing, icons, shells, "how should this look?" | `src/app/tokens.ts` + [docs/CONVENTIONS.md §7](docs/CONVENTIONS.md) |
+| Colour, spacing, icons, shells, "how should this look?" | `src/shared/design/tokens.ts` + [docs/CONVENTIONS.md §7](docs/CONVENTIONS.md) |
+| Permissions, roles, who-can-do-what | `src/core/rbac/` + [docs/SPEC_RBAC.md](docs/SPEC_RBAC.md) |
+| Google Drive links, covers, `FileRef` | `src/core/drive/links.ts` + ADR-017 |
 | Code style, naming, query keys, testing | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) |
 | "Why is it built this way?" | [docs/DECISIONS.md](docs/DECISIONS.md) |
 | Phase/feature sequencing | [docs/ROADMAP.md](docs/ROADMAP.md) |
@@ -88,14 +90,20 @@ app/  ──▶  modules/  ──▶  core/  ──▶  shared/
 React Hook Form + Zod · TanStack Query · Framer Motion · Workbox + IndexedDB (Dexie) ·
 Firebase Auth / Firestore / FCM · Cloud Functions (minimal) · Google Drive API · Vercel
 
-**Actually installed today** (Phase 1 demo, no backend): React **18** · Vite ·
-TS strict · Tailwind v4 (no preflight, ADR-014) · MUI 6 · React Router · Zod.
-Deliberately absent for now: TanStack Query (mock data is synchronous), React
-Hook Form (ADR-013 — a bespoke `useFormEngine` instead, flagged for revisit),
-Framer Motion (CSS keyframes instead), Firebase, Dexie, Workbox.
+**Actually installed today:** React **18** · Vite 6 · TS strict · Tailwind v4
+(no preflight, ADR-014) · MUI 6 · React Router · Zod · **TanStack Query** ·
+**Firebase** (Auth + Firestore, live) · **Vitest** · **ESLint +
+eslint-plugin-boundaries** · **vite-plugin-pwa** (Workbox).
+
+Deliberately absent: React Hook Form (ADR-013 — a bespoke `useFormEngine`
+instead, flagged for revisit as Q7), Framer Motion (CSS keyframes instead),
+Dexie (the Firestore SDK's own IndexedDB persistence replaces it — see the
+comment at the top of `core/sync/index.ts`), Cloud Functions (Spark plan; see
+ADR-019 and DEPLOY.md for exactly what that costs us), FCM push (in-app
+notifications only, by decision).
 
 **Look and feel:** the Forge design system — Material Design 3 expressive, warm
-amber — imported from a Claude Design project. Tokens in `src/app/tokens.ts`,
+amber — imported from a Claude Design project. Tokens in `src/shared/design/tokens.ts`,
 theme in `src/app/theme.ts`, icons are Material Symbols Rounded. See ADR-015.
 
 ---

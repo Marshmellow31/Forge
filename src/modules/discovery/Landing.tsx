@@ -4,7 +4,7 @@ import { Icon } from '@shared/ui/Icon';
 import { useChallenges } from '@core/firebase/hooks';
 import { ChallengeCard } from '@modules/challenges/components';
 import { Blobs, Eyebrow } from '@shared/ui/primitives';
-import { c, radius, ease } from '@app/tokens';
+import { c, radius, ease } from '@shared/design/tokens';
 
 /**
  * S-01 — Marketing landing page.
@@ -46,7 +46,7 @@ export default function Landing() {
         </Box>
         <Typography sx={{ fontSize: 22, fontWeight: 700, letterSpacing: '-.02em', flex: 1 }}>Forge</Typography>
         <Button variant="text" component={Link} to="/discover">Discover</Button>
-        <Button variant="contained" component={Link} to="/home">Open the demo</Button>
+        <Button variant="contained" component={Link} to="/welcome">Get started</Button>
       </Stack>
 
       <Box sx={{ maxWidth: 1240, mx: 'auto', px: { xs: 2.5, md: 5 }, pb: 8 }}>
@@ -77,14 +77,14 @@ export default function Landing() {
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} justifyContent="center">
               <Button
                 component={Link}
-                to="/org"
+                to="/welcome"
                 sx={{ height: 56, px: 3.5, borderRadius: '28px', background: c.inverse, color: c.onInverse, '&:hover': { background: c.inverse } }}
                 endIcon={<Icon name="arrow_forward" size={20} />}
               >
-                Explore admin
+                Get started
               </Button>
-              <Button variant="outlined" component={Link} to="/home" sx={{ height: 56, px: 3.5, borderRadius: '28px' }}>
-                Explore participant
+              <Button variant="outlined" component={Link} to="/discover" sx={{ height: 56, px: 3.5, borderRadius: '28px' }}>
+                Browse challenges
               </Button>
             </Stack>
             <Typography sx={{ fontSize: 13, color: c.inkMuted, mt: 3 }}>

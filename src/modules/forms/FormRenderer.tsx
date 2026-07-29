@@ -5,7 +5,7 @@
 import { useMemo, useState } from 'react';
 import { Box, Stack, Typography, Collapse } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
-import { c, radius } from '@app/tokens';
+import { c, radius } from '@shared/design/tokens';
 import type { Answers, FormSchema } from '@core/forms/types';
 import { computeVisibility } from '@core/forms/conditions';
 import { validateAnswers, completionPercent } from '@core/forms/compiler';

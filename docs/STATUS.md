@@ -7,14 +7,37 @@
 ---
 
 **Last updated:** 2026-07-29
-**Updated by:** Claude (live Firebase backend on branch feat/firebase-backend)
-**Current phase:** Phase 1 — MVP frontend on a live read-only backend
-**Repo state:** 14 screens reading live Firestore (project forge-4d40a, org_demo seeded)
-**Build health:** typecheck + build clean · 13 routes walked cold with 0 console errors · rules 17/17 live checks pass
+**Updated by:** Claude (production hardening — writes, RBAC, Drive, tooling)
+**Current phase:** **Phase 1 complete.** All 17 features shipped; Phase 2 is next
+**Repo state:** 15 screens on live Firestore (project forge-4d40a, org_demo seeded); the app now **writes**
+**Build health:** typecheck clean · lint clean (0 errors, 0 warnings) ·
+**229 unit tests + 55 security-rules tests, all passing** · production build
+clean, service worker generated · **22 routes walked in a real browser with 0
+console errors** · no route renders `NotBuiltYet` any more
+**Rules + indexes are DEPLOYED to `forge-4d40a`** (2026-07-29) and reads were
+re-verified against them afterwards.
 
 ---
 
 ## 1. Where we are, in one paragraph
+
+**This session** turned a read-only demo into something with a spine. The three
+Phase 0 gaps that had been open since the beginning are closed: there is a test
+suite (**187 tests** over the form engine, the Drive parser, RBAC and slugging),
+ESLint runs with `eslint-plugin-boundaries`, and the layer rule is now *enforced*
+— which immediately surfaced 21 real violations, all fixed by moving design
+tokens to `shared/design/` and the auth context to `core/auth/` (ADR-021). Two
+engines that were specified but unbuilt now exist and are pure and tested:
+`core/rbac` (permission catalog, seven built-in roles, scoped grants) and
+`core/drive` (link parsing, `FileRef` construction, cover resolution). The app
+writes: challenge create/edit/delete, rubric editing, registrations, submissions,
+judge reviews and schema publishing all persist, each with a matching security
+rule. Admin bootstrapping is real via redeemable invites (ADR-020) rather than
+scaffolding. Google Drive is integrated link-first (ADR-017) — paste a share
+link for an event cover or a file answer, with validation that explains what is
+wrong instead of failing silently.
+
+### The story before this session
 
 The demo runs end to end and now wears the **Forge design system** — a Material
 Design 3 "expressive" warm-amber scheme imported from the Claude Design project
@@ -41,10 +64,23 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
 - [x] Path aliases (`@core`, `@modules`, `@shared`, `@app`, `@mock`)
 - [x] `npm install` — clean (`@types/node` added so `vite.config.ts` typechecks)
 - [x] Design system — imported, not hand-built. See ROADMAP 0.8 and ADR-015.
-- [ ] `eslint-plugin-boundaries` dependency rule (ESLint not configured at all yet)
-- [ ] Vitest + first unit tests **← the form engine has zero tests, and it is the
-      one thing in this repo that most needs them**
+- [x] `eslint-plugin-boundaries` dependency rule — **enforced.** `npm run lint`.
+      Caught 21 violations on first run; all fixed, not excused (ADR-021).
+      Note: the rule needs `eslint-import-resolver-typescript` or it silently
+      passes — see the note on ADR-021.
+- [x] Vitest + unit tests — **187 passing.** `npm run test`
+      · `core/forms` (86) — all seven cases from SPEC_FORM_ENGINE §10
+      · `core/drive` (45) · `core/rbac` (34) · `core/challenges` (22)
 - [x] Firebase project / env contract / typed data layer — **live**, see §8
+- [x] **Rules test suite — 48 tests, executed and passing** against the real
+      Firestore emulator. `npm run test:rules`. Covers tenant isolation,
+      privilege escalation via invites (ADR-020), the ADR-019 counter bound,
+      the ADR-018 collection-group read, append-only scores, and every
+      Function-only collection.
+      **On this machine `java` is 8, which the emulator refuses.** JDK 21 ships
+      with Android Studio — point `JAVA_HOME` at
+      `C:\Program Files\Android\Android Studio\jbr` first. See the header
+      comment in `vitest.rules.config.ts`.
 - [ ] CI
 
 ### Phase 1 — MVP frontend (live read-only backend)
@@ -89,31 +125,114 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
       (`modules/participants/`)
 - [x] `modules/challenges/components.tsx` — ChallengeCard, StageStepper
 
-**Screens NOT written** (all routed to `NotBuiltYet`, none 404)
-- [ ] S-16 Members · S-23 Audit log · S-24 Analytics · S-14 Workspaces · S-19..22 Settings
-- [ ] S-07 Certificate verification · S-59 Leaderboard (participant) · S-60 Results
-- [ ] Everything else in `UI_SCREENS.md`
+**Screens added this session (10) — every route now resolves to a real screen**
+- [x] **S-27 Challenge editor** (`ChallengeEditor.tsx`) — create and edit in one
+      screen, six tabs: Basics, Cover (Drive), Timeline, Stages, Scoring rubric,
+      Visibility. Publish gating, live validation, delete with confirmation.
+      This is "admins have full control", and every field is data.
+- [x] **S-16 Members** (`organizations/Members.tsx`) — member list plus
+      invitations. How anyone gets permission to do anything (ADR-020).
+- [x] **S-59 Leaderboard** (`challenges/Leaderboard.tsx`) — respects
+      `leaderboardMode`, explains an absence rather than rendering nothing,
+      marks provisional rows, highlights your own.
+
+- [x] **S-56 Submit entry** (`submissions/SubmitScreen.tsx`) — Drive-linked work,
+      draft vs submit, frozen once submitted, late entries accepted and flagged
+      rather than rejected.
+- [x] **S-23 Audit log** — filterable, with the write-once property stated
+- [x] **S-24 Analytics** — entry→submission conversion, judging progress,
+      entrants by category. No charting library: every figure is a ratio, and a
+      chart bundle would cost 40–100 kB on a screen opened twice.
+- [x] **S-14 Workspaces** — read-only list with live challenge counts
+- [x] **S-19..22 Settings** — org profile plus a **permission inspector** that
+      shows exactly which of the 40 permissions you hold and why. A hidden
+      control is otherwise indistinguishable from a missing feature.
+- [x] **S-07 Certificate verification** — public, works signed out
+
+- [x] **S-60 Publish results** (`challenges/PublishResults.tsx`) — previews the
+      exact ranking before writing it, blocks behind an explicit acknowledgement
+      when anything is unscored or provisional, materializes the leaderboard,
+      issues podium certificates, completes the challenge, writes an audit entry
+      and notifies every entrant. Idempotent by derived ids (ADR-022).
+
+- [x] **S-12 Create an organization** (`organizations/CreateOrganization.tsx`) —
+      ROADMAP 1.2. Org → owner membership → roles + first workspace, in that
+      order, because each write is authorized by the one before it. A single
+      batch cannot express that (all its writes are evaluated against
+      pre-batch state), so it is three sequential commits with derived ids so a
+      retry resumes. **This is what makes admin control reachable without the
+      seed script.**
+- [x] **S-00 Welcome / onboarding** (`onboarding/Welcome.tsx`) — three doors:
+      enter challenges, run challenges, or look around with no account. The
+      choice sets which *surface* you see (`core/auth/mode.ts`), never what you
+      may do; permissions still come from `core/rbac` and the rules. The shell
+      hides the Organizing nav group from participants, because a wall of
+      permission-denied screens reads as a broken app rather than as
+      "not for you".
+
+**Screens still NOT written**
+- [ ] Everything else in `UI_SCREENS.md` (Phase 2+)
+
+**Infrastructure added this session**
+- [x] `shared/ui/ErrorBoundary.tsx` — a render error no longer white-screens the
+      app. Resets on navigation; detects a stale-chunk failure after a redeploy
+      and offers a reload, which is the only thing that actually fixes it.
+- [x] `shared/ui/NotificationBell.tsx` — the in-app inbox, with real unread counts
+- [x] `shared/ui/DriveLinkInput.tsx` · `shared/ui/CoverImage.tsx` — Drive covers
+- [x] **PWA** — `vite-plugin-pwa`, generated manifest, service worker, install
+      prompt and update prompt. Icons are generated by `npm run icons` from
+      `scripts/generate-icons.ts` (a hand-written PNG encoder, no binary assets
+      to drift from `tokens.ts`).
+- [x] Nav badges are now live counts. They were hardcoded `'3'` and `'24'`.
 
 **Demo data** (now the seed source, not a runtime dependency)
 - [x] `src/mock/data.ts` — 3 orgs, 4 workspaces, 6 challenges (photography,
       hackathon, wellness, meme, design, pitch), 5 form schemas, 18 registrations,
       16 submissions, leaderboard, rubric, members, audit log, badges, certificates
 
+**Phase 1 feature status**
+
+| # | Feature | State |
+|---|---|---|
+| 1.1 | Google authentication | [x] sign-in, guest, `users/{uid}` bootstrap, invite redemption |
+| 1.2 | Organization creation | [x] **done** — S-12, creator becomes owner |
+| 1.3 | Member invite + roles | [x] **done** — invites + 7 built-in roles (ADR-020) |
+| 1.4 | Workspaces | [x] **done** — create, rename, delete (refused while non-empty) |
+| 1.5 | Challenge CRUD | [x] **done** — S-27 editor, draft→publish, delete |
+| 1.6 | Form builder | [x] publishes real versioned schemas |
+| 1.7 | Form renderer | [x] compiled Zod, conditional visibility |
+| 1.8 | Registration flow | [x] writes, counts, notifies |
+| 1.9 | Drive pipeline | [x] link-first (ADR-017); resumable upload needs Blaze |
+| 1.10 | Submissions | [x] **done** — S-56, drafts, freeze-on-submit, late flagging |
+| 1.11 | Participant dashboard | [x] |
+| 1.12 | Admin dashboard | [x] |
+| 1.13 | Judging | [x] scores + reviews persist to the append-only ledger |
+| 1.14 | Leaderboard | [x] S-59; pages are now materialized by publishing (ADR-022) |
+| 1.15 | Result publishing | [x] **done** — S-60, idempotent, audited, notifies (ADR-022) |
+| 1.16 | Notifications | [x] **in-app**; push (FCM) deliberately out of scope |
+| 1.17 | Installable PWA | [x] **done** |
+
 ### Phase 2 / 3
-Not started. See [ROADMAP.md](ROADMAP.md).
+Not started beyond what is listed above. See [ROADMAP.md](ROADMAP.md). Note that
+several Phase 3 items (webhooks, public REST API, enterprise SSO, Slack/Discord,
+AI review) **cannot** be built on Spark — they need a server to hold a secret and
+receive inbound requests. They are blocked on billing, not on effort.
 
 ## 3. Next three actions (in order)
 
-1. **Test the form engine.** Add Vitest and write the seven cases in
-   [SPEC_FORM_ENGINE §10](SPEC_FORM_ENGINE.md) against `core/forms/conditions.ts`
-   and `core/forms/compiler.ts`. It is the one piece of real logic in the repo and
-   it is completely unguarded — see §5.
-2. **Widen the mock data.** Only `ch_monsoon` has submissions, so "My entries"
-   shows a single row and the Judged/Archived tabs are empty. Give two or three
-   more challenges submissions so the design's list states are exercised.
-3. **Configure ESLint + `eslint-plugin-boundaries`** so the
-   `app → modules → core → shared` rule is enforced rather than merely documented.
-   There is no linter in the repo at all right now.
+1. **Get admin control.** Two routes, and the first needs nothing from anyone:
+   * **Create your own org.** Sign in at `/welcome` → "I want to run
+     challenges" → "Create an organization". You become its owner with every
+     permission, immediately. No seed, no service-account key.
+   * **Take ownership of the seeded demo org** (`org_demo`) instead:
+     `OWNER_EMAIL=you@gmail.com npm run seed`. This needs a service-account key
+     at `./serviceAccountKey.json` — the Admin SDK has no other credential, and
+     there is none in the repo (correctly).
+2. **CI** (Phase 0.7). `npm run verify` runs typecheck + lint + unit tests
+   already; add a workflow that also runs `npm run test:rules` on a JDK 21
+   runner — no longer a blocked problem.
+3. **Phase 2.** Every Phase 0 and Phase 1 item is now done. Workflow designer,
+   teams, blind judging, CSV export and public org pages are the next block.
 
 ## 4. Open questions (need a human decision)
 
@@ -121,7 +240,7 @@ Not started. See [ROADMAP.md](ROADMAP.md).
 |---|---|---|---|
 | Q1 | Firestore region | Cannot be changed later | `asia-south1` |
 | Q2 | Accept `get()` cost in security rules? | 1 extra read per rule eval | Yes, with compact custom claims — [SPEC_RBAC §6](SPEC_RBAC.md) |
-| Q3 | Drive OAuth: per-org account or platform service account? | Quota ownership + trust story | Per-org (matches the cost invariant) |
+| ~~Q3~~ | ~~Drive OAuth: per-org or platform service account?~~ | **Resolved 2026-07-29** — neither. Drive is link-first, so there is no OAuth at all (ADR-017). The question returns if the resumable upload pipeline is built on Blaze. | — |
 | Q4 | Free tier limits | Shapes billing + rules | Unlimited during MVP |
 | Q5 | Teams in MVP or Phase 2? | Registration shape | Phase 2; `Registration.team` exists from day one so no migration |
 | Q6 | White-label / custom domains timing | Hosting + branding | Phase 3 |
@@ -132,16 +251,41 @@ Not started. See [ROADMAP.md](ROADMAP.md).
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| **Form engine has no tests** | It decides validation for every challenge on the platform; a regression is silent and product-wide | Vitest + the seven cases in [SPEC_FORM_ENGINE §10](SPEC_FORM_ENGINE.md) — do this before adding a 15th field type |
-| ~~Nothing has compiled yet~~ | Resolved — typecheck and production build are both clean | — |
-| Drive API quota at deadline peaks | Uploads fail when it matters most | Resumable + backoff + client queue |
-| Security rules grow untestable | Tenant leak — the one bug that ends the product | Emulator rule tests from the first rule written |
-| Firestore 1 MB doc limit on leaderboards | Large challenges break | Paginated leaderboard pages, 50 rows each |
+| ~~Rules are written but unproven~~ | Resolved — **48 rules tests pass against the emulator**, including four cross-tenant isolation cases and six privilege-escalation attempts | Keep the suite green; add a case with every new rule |
+| ~~The deployed rules are older than this repo~~ | Resolved — deployed 2026-07-29, and all reads re-verified against them with 0 console errors | Re-deploy on every rules change; the tests prove the *file*, not what Firebase is enforcing |
+| **Publishing is idempotent, not atomic** | A mid-flight failure leaves a partial publish until it is re-run | Every id is derived, so re-running converges rather than double-awarding (ADR-022). Becomes a Function on Blaze |
+| ~~Form engine has no tests~~ | Resolved — 86 tests, all seven SPEC_FORM_ENGINE §10 cases | — |
+| ~~Nothing has compiled yet~~ | Resolved — typecheck, lint and build all clean | — |
+| **Counters are client-written** | A member could inflate a count | Bounded to two keys by `hasOnly` and recomputable; ADR-019. Reverts to a Function on Blaze |
+| **Leaderboard pages are seeded, not computed** | Ranks do not move when scores land | Needs a scheduled Function (Blaze). The score ledger holds the truth meanwhile |
+| Drive link rot | A cover silently stops loading when someone un-shares a file | Degrades to the category gradient, never a broken-image box; the editor warns on link shapes that are usually unshared |
+| Firestore 1 MB doc limit on leaderboards *and snapshots* | Large orgs break | Paginated leaderboard pages; the seed fails loudly if a snapshot exceeds 1 MiB |
 | Offline sync conflicts on scores | Silent data loss | Append-only score ledger (ADR-009) |
 
 ## 6. Decisions made this session
 
-**This session:** **ADR-015** — one application shell, and `app/tokens.ts` is the
+**This session — five ADRs**, all in [DECISIONS.md](DECISIONS.md):
+
+* **ADR-017 — Drive is link-first, not upload-first.** Paste a share link; we
+  derive a `FileRef`. No OAuth, no consent screen, no bytes stored, and no
+  upload to fail at a deadline. What it cannot do is verify sharing, so the UI
+  is explicit about what it knows versus guesses.
+* **ADR-018 — `collectionGroup` for "my registrations"**, with the org boundary
+  re-asserted in code as well as in rules.
+* **ADR-019 — counters are client-incremented**, bounded to two keys by
+  `hasOnly`. A known trade-off, taken because "0 entrants" on a live challenge
+  is a worse daily failure than a number someone could inflate.
+* **ADR-020 — admin access is bootstrapped by redeemable invites.** The client
+  redeems a grant, it never mints one. Requires a verified email.
+* **ADR-021 — tokens moved to `shared/design/`, auth context to `core/auth/`.**
+  Forced by turning the boundary rule on, which found 21 real violations.
+
+**Also worth knowing:** the boundary rule silently passed until
+`eslint-import-resolver-typescript` was added — the `@app/…` aliases were
+unresolvable, so every check trivially succeeded. If you add a lint rule, verify
+it can fail before trusting it.
+
+**Previously:** **ADR-015** — one application shell, and the token file is the
 single source of colour. Recorded in [DECISIONS.md](DECISIONS.md).
 
 Also: the route tree lives in `App.tsx`; no separate `router.tsx` was created
@@ -205,13 +349,23 @@ collection costs 95 document reads; at 700 viewers that is 66,500 against a
 documents bring it to 2 reads/viewer, 1,400 for 700 people, 2.8% of quota, with
 headroom for ~25,000 viewers/day. See `src/core/firebase/snapshot.ts`.
 
-**Still not built** — the full list is in [DEPLOY.md](../DEPLOY.md#what-is-not-built):
-no Cloud Functions (so `counters`, `user.stats` and leaderboard pages are seeded,
-not maintained); the app reads but does not write; no Drive uploads; the judge
-queue is not assignment-driven; **rules have no emulator test suite** — the 17
-live checks are a probe, not the suite DATA_MODEL.md §6 requires.
+**The app now writes.** Registrations, submissions, judge reviews, score-ledger
+events, challenge create/edit/delete, rubric edits, schema publishing, invites
+and notifications all persist, each with a matching rule. `firestore.rules` grew
+correspondingly — invites, the notification inbox, the bounded counter update,
+and self-service membership with an escalation guard.
 
-**Two things to undo before real customers:**
+> **The new rules have not been deployed or executed.** Run
+> `npm run rules:deploy` before expecting any write to succeed against
+> `forge-4d40a`, and `npm run test:rules` (JDK 21) before trusting them.
+
+**Still not built:** no Cloud Functions, so `user.stats` and leaderboard pages
+are seeded rather than maintained, and results publishing (1.15) has no owner.
+No resumable Drive upload — links only, by decision (ADR-017). The judge queue
+is still not assignment-driven. No CI.
+
+**Three things to undo before real customers:**
 1. ADR-016 — delete `isDemoOrg` / `demoReadable` from `firestore.rules`.
-2. Rotate the service-account key used to seed; one was exposed in a chat
+2. ADR-019 — move counters to a Function and re-tighten the challenge update rule.
+3. Rotate the service-account key used to seed; one was exposed in a chat
    transcript on 2026-07-29 and must be deleted in the Firebase console.

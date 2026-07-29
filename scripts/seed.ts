@@ -23,8 +23,11 @@ import {
   orgs, workspaces, challenges, registrations, submissions, leaderboard,
   rubric, members, auditLog, badges, certificates, formSchemas, currentUser,
 } from '../src/mock/data';
+import { BUILT_IN_ROLE_LIST, resolvedPermissionsFor } from '../src/core/rbac';
 
 const ORG_ID = process.env.DEMO_ORG_ID ?? 'org_demo';
+/** Whoever signs in with this address redeems a pending owner invite. ADR-020. */
+const OWNER_EMAIL = process.env.OWNER_EMAIL ?? '';
 const KEY_PATH =
   process.env.GOOGLE_APPLICATION_CREDENTIALS ?? resolve(process.cwd(), 'serviceAccountKey.json');
 
@@ -143,7 +146,33 @@ async function main() {
     ]);
   }
 
+  // The seven built-in roles, written as documents so an org can clone one into
+  // a custom role. They are `isSystem` and the rules refuse edits to them.
+  for (const role of BUILT_IN_ROLE_LIST) {
+    ops.push([
+      orgRef.collection('roles').doc(role.id),
+      {
+        ...base(),
+        name: role.name,
+        description: role.description,
+        permissions: role.permissions,
+        isSystem: true,
+      },
+    ]);
+  }
+
   for (const m of members) {
+    // The fixture stores display names ('Owner'); role ids are lowercase.
+    // An unrecognised name falls back to `viewer` rather than to no role at
+    // all, so a typo in the fixture cannot silently mint a permissionless
+    // member that looks active in the UI.
+    const roleIds = m.roles
+      .map((r) => r.toLowerCase())
+      .filter((r) => BUILT_IN_ROLE_LIST.some((role) => role.id === r));
+    if (roleIds.length === 0) roleIds.push('viewer');
+
+    // Resolved from the same pure engine the client and the rules agree on,
+    // rather than a hand-maintained list that silently drifts from the catalog.
     ops.push([
       orgRef.collection('members').doc(m.id),
       {
@@ -152,20 +181,48 @@ async function main() {
         email: m.email,
         displayName: m.name,
         photoURL: null,
-        roleIds: m.roles,
-        // Seeded members are full admins so the demo's admin screens work.
-        resolvedPermissions: [
-          'org.update', 'member.manage', 'workspace.manage', 'role.manage',
-          'form.manage', 'reward.manage', 'audit.read',
-          'challenge.create', 'challenge.update', 'challenge.delete',
-          'registration.read', 'registration.manage',
-          'submission.read', 'review.read', 'review.write',
-          'score.read', 'score.write',
-        ],
+        roleIds,
+        resolvedPermissions: resolvedPermissionsFor({ roleIds, status: 'active' }),
+        directPermissions: [],
+        scopedGrants: [],
         status: m.status,
         joinedAt: ts(m.joinedAt),
       },
     ]);
+  }
+
+  /**
+   * The bootstrap invite (ADR-020).
+   *
+   * Without this, the seeded members are fixture rows whose ids nobody's real
+   * Google account will ever match, so a live sign-in lands with zero
+   * permissions and every admin screen is read-only. This writes a pending
+   * **owner** invite for a real email address; signing in with that account
+   * redeems it and grants full control.
+   *
+   *   OWNER_EMAIL=you@gmail.com npm run seed
+   */
+  if (OWNER_EMAIL) {
+    const email = OWNER_EMAIL.trim().toLowerCase();
+    ops.push([
+      orgRef.collection('invites').doc(email),
+      {
+        ...base(),
+        email,
+        roleIds: ['owner'],
+        resolvedPermissions: resolvedPermissionsFor({ roleIds: ['owner'], status: 'active' }),
+        invitedBy: 'seed',
+        status: 'pending',
+        acceptedBy: null,
+        acceptedAt: null,
+      },
+    ]);
+    console.log(`  owner invite queued for ${email}`);
+  } else {
+    console.log(
+      '  no OWNER_EMAIL set — nobody will be able to edit anything.\n' +
+        '    Re-run as:  OWNER_EMAIL=you@gmail.com npm run seed',
+    );
   }
 
   for (const [id, schema] of Object.entries(formSchemas)) {

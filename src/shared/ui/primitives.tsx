@@ -1,7 +1,7 @@
 import type { ReactNode, CSSProperties } from 'react';
 import { Box, Stack, Tooltip, Typography } from '@mui/material';
 import { Icon } from './Icon';
-import { c, radius, shadow, ease, mono, pillFor } from '@app/tokens';
+import { c, radius, shadow, ease, mono, pillFor } from '@shared/design/tokens';
 
 /* ------------------------------------------------------------------ *
  * Shared visual language, imported from the Forge design system.

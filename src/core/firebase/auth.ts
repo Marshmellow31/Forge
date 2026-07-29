@@ -4,6 +4,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, demoOrgId } from './app';
+import { claimInvite } from '@core/sync';
 
 /**
  * Authentication and first-run provisioning.
@@ -65,20 +66,40 @@ async function provision(user: User) {
 
   const memberRef = doc(db(), 'organizations', demoOrgId(), 'members', user.uid);
   const member = await getDoc(memberRef);
-  if (!member.exists()) {
-    await setDoc(memberRef, {
-      userId: user.uid,
-      email: user.email ?? 'guest@forge.demo',
-      displayName: user.displayName ?? 'Demo Guest',
-      photoURL: user.photoURL ?? null,
-      roleIds: ['demoViewer'],
-      resolvedPermissions: [],
-      status: 'active',
-      joinedAt: serverTimestamp(),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      createdBy: user.uid,
-      schemaVersion: 1,
+  if (member.exists()) return;
+
+  // A pending invite is the only way to arrive with real permissions (ADR-020).
+  // The rules verify the invite matches this user's *verified* email and that
+  // the roles claimed equal the invite's exactly, so nothing here is trusted.
+  try {
+    const claimed = await claimInvite(demoOrgId(), {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+      photoURL: user.photoURL,
     });
+    if (claimed) return;
+  } catch {
+    // No invite, or the rules refused it. Fall through to a plain membership —
+    // failing sign-in over a missing invite would be the wrong trade.
   }
+
+  // No invite: a read-only viewer. This is ADR-016 demo scaffolding and is
+  // removed with the rest of it before a second real tenant exists.
+  await setDoc(memberRef, {
+    userId: user.uid,
+    email: user.email ?? 'guest@forge.demo',
+    displayName: user.displayName ?? 'Demo Guest',
+    photoURL: user.photoURL ?? null,
+    roleIds: ['demoViewer'],
+    resolvedPermissions: [],
+    directPermissions: [],
+    scopedGrants: [],
+    status: 'active',
+    joinedAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    createdBy: user.uid,
+    schemaVersion: 1,
+  });
 }

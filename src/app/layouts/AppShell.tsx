@@ -1,10 +1,11 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Box, Stack, Typography, useMediaQuery } from '@mui/material';
+import { Box, IconButton, Stack, Tooltip, Typography, useMediaQuery } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { Icon } from '@shared/ui/Icon';
-import { c, radius, shadow, ease } from '@app/tokens';
-import { useOrg, useCurrentUser } from '@core/firebase/hooks';
-import { useAuth } from '@app/providers/AppProviders';
+import { c, radius, shadow, ease } from '@shared/design/tokens';
+import { useCurrentUser, useMyRegistrations, useChallenges } from '@core/firebase/hooks';
+import { useAuth } from '@core/auth';
+import { NotificationBell } from '@shared/ui/NotificationBell';
 
 /**
  * The single application shell.
@@ -19,18 +20,24 @@ interface NavItem {
   to: string;
   label: string;
   icon: string;
-  badge?: string;
+  /** Key into the live badge counts, not a literal number. */
+  badge?: 'entries' | 'reviews';
   /** Match nested paths (e.g. /org/challenges/:id) as this item. */
   match?: (path: string) => boolean;
 }
 
+/**
+ * `badge` is a key resolved against live counts at render time, never a literal.
+ * A hardcoded "3" that never moves is worse than no badge: it teaches people
+ * the number means nothing.
+ */
 const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: 'For you',
     items: [
       { to: '/home', label: 'Home', icon: 'home' },
       { to: '/discover', label: 'Discover', icon: 'explore', match: (p) => p.startsWith('/discover') || p.startsWith('/c/') },
-      { to: '/me/registrations', label: 'My entries', icon: 'assignment', badge: '3' },
+      { to: '/me/registrations', label: 'My entries', icon: 'assignment', badge: 'entries' },
       { to: '/me/achievements', label: 'Awards', icon: 'military_tech', match: (p) => p.startsWith('/me/achievements') || p.startsWith('/verify/') },
     ],
   },
@@ -40,7 +47,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { to: '/org', label: 'Overview', icon: 'space_dashboard', match: (p) => p === '/org' },
       { to: '/org/challenges', label: 'Challenges', icon: 'emoji_events', match: (p) => p.startsWith('/org/challenges') && !p.endsWith('/form') },
       { to: '/org/members', label: 'Members', icon: 'group' },
-      { to: '/judge', label: 'Judging', icon: 'gavel', badge: '24', match: (p) => p.startsWith('/judge') },
+      { to: '/judge', label: 'Judging', icon: 'gavel', badge: 'reviews', match: (p) => p.startsWith('/judge') },
     ],
   },
 ];
@@ -67,6 +74,13 @@ const SCREEN_TITLES: { test: (p: string) => boolean; title: string }[] = [
   { test: (p) => p.startsWith('/judge'), title: 'Judging' },
 ];
 
+/** What the sidebar footer says you are currently doing. */
+const MODE_LABEL: Record<string, string> = {
+  participant: 'Entering challenges',
+  organizer: 'Organizing',
+  demo: 'Exploring the demo',
+};
+
 const isActive = (item: NavItem, path: string) =>
   item.match ? item.match(path) : path === item.to || path.startsWith(`${item.to}/`);
 
@@ -78,15 +92,38 @@ export default function AppShell() {
 
   const inOrgContext = pathname.startsWith('/org');
   const primaryLabel = inOrgContext ? 'New challenge' : 'Enter a challenge';
-  const primaryTo = inOrgContext ? '/org/challenges' : '/discover';
+  const primaryTo = inOrgContext ? '/org/challenges/new' : '/discover';
   const screenTitle = SCREEN_TITLES.find((s) => s.test(pathname))?.title ?? 'Forge';
-  const { user } = useAuth();
-  const { data: org } = useOrg();
+  const { user, signOutNow, mode } = useAuth();
   const { data: profile } = useCurrentUser(user?.uid ?? 'u_self');
+  const { data: myRegistrations = [] } = useMyRegistrations(user?.uid);
+  const { data: challenges = [] } = useChallenges();
   const displayName = user?.displayName ?? profile?.name ?? 'Demo viewer';
   const initials = displayName.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
 
+  // Real counts, from data already in the cache. A zero renders as no badge
+  // rather than a "0", which is noise.
+  const badgeCounts: Record<'entries' | 'reviews', number> = {
+    entries: myRegistrations.length,
+    reviews: challenges.reduce((n, ch) => n + ch.counters.reviewsPending, 0),
+  };
+
   const showFab = !isDesktop && ['/home', '/discover', '/me/registrations'].includes(pathname);
+
+  /**
+   * A participant is not shown the organizing group.
+   *
+   * Not for security — the rules do that — but because every screen in it would
+   * refuse them, and a wall of permission-denied messages reads as a broken app
+   * rather than as "this is not for you". They can still reach any of it by URL,
+   * and switching surface is one click away in the footer.
+   *
+   * The group stays visible while the mode is unset, so nothing disappears for
+   * someone who has not been through onboarding.
+   */
+  const visibleGroups = NAV_GROUPS.filter(
+    (g) => g.title !== 'Organizing' || mode === null || mode === 'organizer',
+  );
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', background: c.surface, color: c.ink }}>
@@ -141,7 +178,7 @@ export default function AppShell() {
             <span>{primaryLabel}</span>
           </Box>
 
-          {NAV_GROUPS.map((g) => (
+          {visibleGroups.map((g) => (
             <Box key={g.title} sx={{ flex: 'none', mb: 1.75 }}>
               <Typography variant="overline" sx={{ display: 'block', p: '0 20px 8px' }}>{g.title}</Typography>
               <Stack spacing={0.5}>
@@ -171,9 +208,9 @@ export default function AppShell() {
                     >
                       <Icon name={n.icon} size={22} fill={active} />
                       <Box component="span" sx={{ flex: 1 }}>{n.label}</Box>
-                      {n.badge && (
+                      {n.badge && badgeCounts[n.badge] > 0 && (
                         <Box component="span" sx={{ fontSize: 11, fontWeight: 700, px: 1, py: 0.25, borderRadius: '10px', background: c.inverse, color: c.primary }}>
-                          {n.badge}
+                          {badgeCounts[n.badge]}
                         </Box>
                       )}
                     </Box>
@@ -195,11 +232,24 @@ export default function AppShell() {
             </Box>
             <Box sx={{ minWidth: 0, flex: 1 }}>
               <Typography noWrap sx={{ fontSize: 14, fontWeight: 600 }}>{displayName}</Typography>
-              <Typography sx={{ fontSize: 12, color: c.inkMuted }}>
-                {profile ? `${profile.points.toLocaleString()} pts · ` : ''}{org?.name ?? ''}
+              <Typography noWrap sx={{ fontSize: 12, color: c.inkMuted }}>
+                {user ? MODE_LABEL[mode ?? 'participant'] : 'Viewing · read-only'}
               </Typography>
             </Box>
-            <Icon name="unfold_more" size={20} color={c.inkMuted} />
+            {/* Reading needs no identity; writing does. Signed out, this leads
+                to the front door rather than silently minting a guest account —
+                choosing a surface is the thing that actually orients someone. */}
+            <Tooltip title={user ? 'Sign out' : 'Sign in or switch surface'}>
+              {user ? (
+                <IconButton size="small" aria-label="Sign out" onClick={() => void signOutNow()}>
+                  <Icon name="logout" size={20} />
+                </IconButton>
+              ) : (
+                <IconButton size="small" aria-label="Sign in" component={Link} to="/welcome">
+                  <Icon name="login" size={20} />
+                </IconButton>
+              )}
+            </Tooltip>
           </Stack>
         </Box>
       )}
@@ -255,17 +305,24 @@ export default function AppShell() {
             )}
             <Box sx={{ flex: isDesktop ? undefined : 'none' }} />
             <Stack direction="row" alignItems="center" spacing={0.5}>
-              <Box
-                component="button"
-                aria-label="Notifications"
-                sx={{ position: 'relative', width: 48, height: 48, border: 'none', borderRadius: '50%', background: 'transparent', cursor: 'pointer', display: 'grid', placeItems: 'center', color: c.inkMuted, transition: 'background 180ms', '&:hover': { background: c.surfaceField } }}
-              >
-                <Icon name="notifications" size={22} />
-                <Box sx={{ position: 'absolute', top: 11, right: 12, width: 8, height: 8, borderRadius: '50%', background: c.error, border: `2px solid ${c.surface}` }} />
-              </Box>
-              <Box sx={{ width: 40, height: 40, borderRadius: '50%', background: c.inverse, color: c.primary, display: 'grid', placeItems: 'center', fontSize: 14, fontWeight: 700, ml: 0.5 }}>
-                {initials}
-              </Box>
+              <NotificationBell />
+              <Tooltip title={user ? `Signed in as ${displayName} — sign out` : 'Sign in'}>
+                <Box
+                  component={user ? 'button' : Link}
+                  to={user ? undefined : '/welcome'}
+                  aria-label={user ? `Signed in as ${displayName}. Sign out` : 'Sign in'}
+                  onClick={user ? () => void signOutNow() : undefined}
+                  sx={{
+                    width: 40, height: 40, ml: 0.5, p: 0, border: 'none', cursor: 'pointer',
+                    borderRadius: '50%', background: c.inverse, color: c.primary,
+                    display: 'grid', placeItems: 'center', fontSize: 14, fontWeight: 700,
+                    transition: `transform 160ms ${ease}`,
+                    '&:hover': { transform: 'scale(1.06)' },
+                  }}
+                >
+                  {user ? initials : <Icon name="login" size={20} />}
+                </Box>
+              </Tooltip>
             </Stack>
           </Stack>
         </Box>

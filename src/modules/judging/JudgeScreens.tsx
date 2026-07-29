@@ -5,9 +5,12 @@ import {
 } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { useChallenges, useSubmissions, useRubric, useChallengeSnapshot } from '@core/firebase/hooks';
+import { useSubmitReview } from '@core/firebase/mutations';
+import { useAuth } from '@core/auth';
+import { NotSignedInError } from '@core/sync';
 import { QueryBoundary } from '@shared/ui/QueryBoundary';
 import { PageTitle, EmptyState, StatTile, Num, Tag, liftSx, ListSkeleton } from '@shared/ui/primitives';
-import { c, radius, coverFor, mono } from '@app/tokens';
+import { c, radius, coverFor, mono } from '@shared/design/tokens';
 
 /**
  * The judged challenge for this demo: the first one actually in judging.
@@ -21,7 +24,7 @@ function useJudgeQueue() {
   const { data: submissions = [], isLoading, error } = useSubmissions(target?.id);
   const { data: rubric = [] } = useRubric(target?.id);
   const queue = submissions.filter((s) => s.reviewsDone < s.reviewsTotal);
-  return { submissions, queue, rubric, isLoading, error };
+  return { submissions, queue, rubric, isLoading, error, challengeId: target?.id };
 }
 
 /** S-46 — Judging queue. */
@@ -136,7 +139,9 @@ export function JudgeQueue() {
 export function ScoringScreen() {
   const { sid } = useParams();
   const nav = useNavigate();
-  const { queue, rubric, isLoading } = useJudgeQueue();
+  const { queue, rubric, isLoading, challengeId } = useJudgeQueue();
+  const { user } = useAuth();
+  const reviewMutation = useSubmitReview(challengeId);
   const idx = queue.findIndex((s) => s.id === sid);
   const sub = queue[idx];
   const [scores, setScores] = useState<Record<string, number>>({});
@@ -149,6 +154,34 @@ export function ScoringScreen() {
 
   const weighted = rubric.reduce((sum, r) => sum + ((scores[r.id] ?? 0) / r.max) * r.weight * 100, 0);
   const complete = rubric.every((r) => scores[r.id] !== undefined);
+
+  const send = (recused: boolean) =>
+    reviewMutation.mutate(
+      {
+        submissionId: sub.id,
+        judgeId: user?.uid,
+        stageKey: sub.stageKey,
+        criteriaScores: rubric.map((r) => ({
+          criterionId: r.id,
+          score: scores[r.id] ?? 0,
+          comment: null,
+        })),
+        totalRaw: rubric.reduce((n, r) => n + (scores[r.id] ?? 0), 0),
+        totalWeighted: weighted,
+        comment: comment || null,
+        recused,
+      },
+      {
+        onSuccess: () => {
+          setRecuse(false);
+          if (recused) nav('/judge');
+          else setSubmitted(true);
+        },
+      },
+    );
+
+  const reviewError = reviewMutation.error;
+  const needsSignIn = reviewError instanceof NotSignedInError;
 
   return (
     <>
@@ -252,6 +285,29 @@ export function ScoringScreen() {
             sx={{ mb: 2.5 }}
           />
 
+          {reviewError && (
+            <Stack
+              direction="row"
+              gap={1.5}
+              alignItems="flex-start"
+              sx={{ mb: 2.5, p: 2, borderRadius: `${radius.field}px`, background: c.errorContainer }}
+            >
+              <Icon name={needsSignIn ? 'lock' : 'error'} size={20} color={c.errorInk} />
+              <Box>
+                <Box sx={{ fontSize: 14, fontWeight: 600, color: c.onErrorContainer, mb: 0.25 }}>
+                  {needsSignIn ? 'Sign in to score' : 'Could not save this review'}
+                </Box>
+                <Box sx={{ fontSize: 13, lineHeight: 1.5, color: c.errorBody }}>
+                  {needsSignIn
+                    ? 'Judging writes to the append-only score ledger, so it needs an identity. Your scores are still here.'
+                    : reviewError instanceof Error
+                      ? reviewError.message
+                      : String(reviewError)}
+                </Box>
+              </Box>
+            </Stack>
+          )}
+
           {!complete && (
             <Box sx={{ mb: 2.5, p: 2, borderRadius: `${radius.field}px`, background: c.errorContainer, color: c.errorBody, fontSize: 13, lineHeight: 1.5 }}>
               Score every criterion before submitting. A skipped criterion is never treated as zero.
@@ -265,10 +321,10 @@ export function ScoringScreen() {
             <Button
               variant="contained"
               sx={{ flex: 1, height: 52, borderRadius: '26px' }}
-              disabled={!complete}
-              onClick={() => setSubmitted(true)}
+              disabled={!complete || reviewMutation.isPending}
+              onClick={() => send(false)}
             >
-              Submit review
+              {reviewMutation.isPending ? 'Saving…' : 'Submit review'}
             </Button>
           </Stack>
         </Box>
@@ -287,7 +343,7 @@ export function ScoringScreen() {
         </DialogContent>
         <DialogActions sx={{ px: 3.5, pb: 3 }}>
           <Button variant="text" onClick={() => setRecuse(false)}>Cancel</Button>
-          <Button variant="contained" onClick={() => { setRecuse(false); nav('/judge'); }}>Recuse</Button>
+          <Button variant="contained" disabled={reviewMutation.isPending} onClick={() => send(true)}>Recuse</Button>
         </DialogActions>
       </Dialog>
 

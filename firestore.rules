@@ -27,6 +27,39 @@ service cloud.firestore {
       return isMember(orgId) && perm in get(memberPath(orgId)).data.resolvedPermissions;
     }
 
+    // ---- Invite redemption (SPEC_RBAC §3, Phase 1.3) ---------------------
+    // How the first admin exists without a Cloud Function.
+    //
+    // An invite document is keyed by lowercased email and can only be written
+    // by someone who already holds `member.invite`. Redeeming it is the ONLY
+    // way a client may create its own membership, and it may not choose what
+    // that membership contains: the roles and resolved permissions must equal
+    // the invite's exactly. So the client redeems a grant, it never mints one.
+    //
+    // `email_verified` is required. Without it, anyone able to set an arbitrary
+    // email claim could redeem an invite addressed to someone else.
+    function invitePath(orgId) {
+      return /databases/$(database)/documents/organizations/$(orgId)/invites/$(request.auth.token.email.lower());
+    }
+    function hasPendingInvite(orgId) {
+      return isSignedIn()
+        && request.auth.token.email != null
+        && request.auth.token.email_verified == true
+        && exists(invitePath(orgId))
+        && get(invitePath(orgId)).data.status == 'pending';
+    }
+    function claimsExactlyTheInvite(orgId) {
+      return request.resource.data.roleIds == get(invitePath(orgId)).data.roleIds
+        && request.resource.data.resolvedPermissions == get(invitePath(orgId)).data.resolvedPermissions
+        && request.resource.data.status == 'active'
+        && request.resource.data.userId == uid();
+    }
+
+    // Only these keys changed, and nothing else.
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
     // ---- Demo scaffolding (ADR-016) --------------------------------------
     // The public demo is READ-ONLY seeded data in ONE named organization, and
     // is world-readable: no sign-in, so 700 viewers do not mint 700 throwaway
@@ -41,7 +74,33 @@ service cloud.firestore {
     // in any organization.
     function isDemoOrg(orgId) { return orgId == 'org_demo'; }
     function demoReadable(orgId) { return isDemoOrg(orgId); }
+
+    // Writes in the demo org are allowed ONLY for a signed-in user and ONLY on
+    // documents keyed to their own uid. That is what makes this safe without a
+    // membership: a viewer can register themselves and score as themselves,
+    // and cannot touch anyone else's row, the leaderboard, the audit log or
+    // any shared org state.
+    function demoWriter(orgId) { return isDemoOrg(orgId) && isSignedIn(); }
     // ----------------------------------------------------------------------
+
+    // ---- Collection-group read: "my registrations" (ADR-018) --------------
+    // A nested `match /organizations/{orgId}/…/registrations/{rid}` rule does
+    // NOT apply to a collectionGroup() query — group queries are only matched
+    // by a `{path=**}` rule at the root. Without this block the query fails
+    // with permission-denied no matter what the nested rules say.
+    //
+    // The condition tests a **field**, not the document id, and that is
+    // load-bearing: for a list operation Firestore evaluates rules against the
+    // query's constraints rather than against documents it has not read yet. A
+    // `rid == uid()` check is unverifiable there and would deny everything,
+    // whereas `resource.data.userId == uid()` is satisfied by the matching
+    // `where('userId', '==', uid)` filter the query carries.
+    //
+    // This grants nothing new: it is exactly "you may read a registration that
+    // is yours", which the nested rule already allowed for direct reads.
+    match /{path=**}/registrations/{registrationId} {
+      allow read: if isSignedIn() && resource.data.userId == uid();
+    }
 
     match /users/{userId} {
       allow read: if isSignedIn();
@@ -61,7 +120,15 @@ service cloud.firestore {
     // Public verification URLs must resolve without org context.
     match /certificates/{certId} {
       allow read: if true;
-      allow write: if false;                    // Functions only
+      // Issued by result publishing (ADR-022). The permission is checked
+      // against the org named *in the payload*, because this collection is
+      // global and the path carries no tenant — so a member of org A cannot
+      // mint a certificate claiming to be from org B.
+      allow create: if hasPerm(request.resource.data.orgId, 'certificate.issue');
+      // Re-publishing overwrites its own certificate; revoking flips one flag.
+      allow update: if hasPerm(resource.data.orgId, 'certificate.issue')
+                    && request.resource.data.orgId == resource.data.orgId;
+      allow delete: if false;                   // revoke, never erase
     }
 
     match /publicChallenges/{cid} {
@@ -77,13 +144,76 @@ service cloud.firestore {
 
       match /members/{memberId} {
         allow read: if isMember(orgId) || demoReadable(orgId);
-        allow create: if hasPerm(orgId, 'member.manage');
-        allow update, delete: if hasPerm(orgId, 'member.manage');
+
+        // Three ways in, and no others:
+        //   1. an admin adds you;
+        //   2. you redeem an invite addressed to your own verified email, and
+        //      claim exactly what it granted;
+        //   3. you are the person named as `ownerId` on the organization —
+        //      i.e. you just created it (ROADMAP 1.2). Without this an org
+        //      creator could never become a member of their own org, because
+        //      `hasPerm` reads a membership that does not exist yet.
+        //      It grants nothing elsewhere: `ownerId` is set once, at creation,
+        //      by a rule that requires it to equal the caller.
+        allow create: if hasPerm(orgId, 'member.manage')
+                      || (memberId == uid()
+                          && hasPendingInvite(orgId)
+                          && claimsExactlyTheInvite(orgId))
+                      || (memberId == uid()
+                          && exists(/databases/$(database)/documents/organizations/$(orgId))
+                          && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerId == uid());
+
+        // A member may keep their own display name and photo current. They may
+        // never touch roleIds, resolvedPermissions or status — that is the
+        // whole privilege boundary, and `hasOnly` is what pins it shut.
+        allow update: if hasPerm(orgId, 'member.manage')
+                      || (memberId == uid()
+                          && onlyChanges(['displayName', 'photoURL', 'updatedAt']));
+
+        allow delete: if hasPerm(orgId, 'member.manage');
+
+        // Per-user notification inbox. The path scopes it to its owner, so no
+        // query filter is load-bearing.
+        match /notifications/{notificationId} {
+          allow read: if memberId == uid() || hasPerm(orgId, 'member.manage');
+          // The owner records their own activity; a broadcaster may deliver to
+          // anyone. Both are creates of a document the recipient can then read.
+          allow create: if memberId == uid() || hasPerm(orgId, 'notification.send');
+          // Marking read is the only update a recipient may make.
+          allow update: if memberId == uid() && onlyChanges(['readAt', 'updatedAt']);
+          allow delete: if memberId == uid();
+        }
+      }
+
+      // Pending invitations, keyed by lowercased email.
+      match /invites/{email} {
+        // You may read an invite addressed to you — that is how the app knows
+        // to offer redemption — and admins may read the whole list.
+        allow read: if hasPerm(orgId, 'member.read')
+                    || (isSignedIn() && request.auth.token.email != null
+                        && email == request.auth.token.email.lower());
+        allow create: if hasPerm(orgId, 'member.invite');
+        // An admin may re-issue or revoke; an invitee may only mark their own
+        // invite accepted, and may not alter the roles it carries.
+        allow update: if hasPerm(orgId, 'member.manage')
+                      || (isSignedIn() && request.auth.token.email != null
+                          && email == request.auth.token.email.lower()
+                          && onlyChanges(['status', 'acceptedBy', 'acceptedAt', 'updatedAt'])
+                          && request.resource.data.status == 'accepted'
+                          && request.resource.data.acceptedBy == uid());
+        allow delete: if hasPerm(orgId, 'member.manage');
       }
 
       match /workspaces/{wid} {
         allow read: if isMember(orgId) || demoReadable(orgId);
-        allow write: if hasPerm(orgId, 'workspace.manage');
+        // These are three distinct permissions in the catalog (SPEC_RBAC §2).
+        // An earlier version checked `workspace.manage`, which no role grants
+        // and which therefore denied every write — a rule can be wrong by
+        // naming a permission that does not exist, which is why
+        // `rules-permissions.test.ts` now cross-checks the two.
+        allow create: if hasPerm(orgId, 'workspace.create');
+        allow update: if hasPerm(orgId, 'workspace.update');
+        allow delete: if hasPerm(orgId, 'workspace.delete');
       }
 
       match /roles/{roleId} {
@@ -128,7 +258,23 @@ service cloud.firestore {
                     || demoReadable(orgId)
                     || resource.data.visibility == 'public';
         allow create: if hasPerm(orgId, 'challenge.create');
-        allow update: if hasPerm(orgId, 'challenge.update');
+
+        // Two update paths, deliberately unequal.
+        //
+        // 1. An organizer with `challenge.update` may edit the challenge.
+        // 2. Any signed-in user may adjust the denormalized `counters` map and
+        //    nothing else. Registering has to move `counters.registrations`,
+        //    and on the Spark plan there is no Cloud Function to own that
+        //    number (DATA_MODEL.md §4 assigns it to one). `hasOnly` bounds the
+        //    blast radius to two keys: a participant cannot retitle, republish,
+        //    reschedule or unpublish a challenge through this door.
+        //
+        // The residual risk — a member inflating a count — is visible, bounded
+        // to their own org, and recomputable from the registrations themselves.
+        // Recorded as ADR-019; it reverts to a Function the day billing is on.
+        allow update: if hasPerm(orgId, 'challenge.update')
+                      || (isSignedIn() && onlyChanges(['counters', 'updatedAt']));
+
         allow delete: if hasPerm(orgId, 'challenge.delete');
 
         // registrationId == userId in individual mode, so "one entry per user"
@@ -138,6 +284,8 @@ service cloud.firestore {
           allow create: if rid == uid() && request.resource.data.userId == uid();
           allow update: if (rid == uid() && resource.data.status == 'pending')
                         || hasPerm(orgId, 'registration.manage');
+          // create above already requires rid == uid(), so a demo viewer can
+          // register themselves and no one else.
           allow delete: if hasPerm(orgId, 'registration.manage');
         }
 
@@ -152,9 +300,12 @@ service cloud.firestore {
         }
 
         match /reviews/{reviewId} {
-          allow read:   if hasPerm(orgId, 'review.read') || demoReadable(orgId);
-          allow create, update: if hasPerm(orgId, 'review.write')
-                                && request.resource.data.judgeId == uid();
+          allow read: if hasPerm(orgId, 'review.read') || demoReadable(orgId);
+          // The document id encodes the judge, so a viewer can only ever write
+          // their own review and can never overwrite another judge's.
+          allow create, update: if request.resource.data.judgeId == uid()
+                                && reviewId == request.resource.data.submissionId + '_' + uid()
+                                && (hasPerm(orgId, 'review.write') || demoWriter(orgId));
           allow delete: if false;
         }
 
@@ -166,16 +317,25 @@ service cloud.firestore {
 
         // Append-only ledger — never overwrite a score. ADR-009.
         match /scores/{scoreId} {
-          allow read:   if hasPerm(orgId, 'score.read') || demoReadable(orgId);
-          allow create: if hasPerm(orgId, 'score.write');
+          allow read: if hasPerm(orgId, 'score.read') || demoReadable(orgId);
+          allow create: if request.resource.data.judgeId == uid()
+                        && (hasPerm(orgId, 'score.write') || demoWriter(orgId));
+          // Append-only. Never overwrite a score; write a new event. ADR-009.
           allow update, delete: if false;
         }
 
-        // Materialized by a scheduled job, never computed in the browser.
+        // Materialized, never computed in the browser by a viewer: ranking
+        // reads every review in the challenge, which is 1,500 documents per
+        // viewer at 500 entrants × 3 judges.
         match /leaderboard/{pageId} {
           allow read: if isMember(orgId) || demoReadable(orgId)
                       || get(/databases/$(database)/documents/organizations/$(orgId)/challenges/$(cid)).data.visibility == 'public';
-          allow write: if false;                // Functions only
+          // Written once, by result publishing, by someone holding
+          // `result.publish` (ADR-022). A Function owns this on Blaze; on Spark
+          // the permission is the boundary. Note this is a *privileged org
+          // member*, not any signed-in client.
+          allow create, update: if hasPerm(orgId, 'result.publish');
+          allow delete: if false;
         }
 
         match /announcements/{aid} {

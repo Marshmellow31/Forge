@@ -371,3 +371,281 @@ screens need no auth-gated `users/{uid}` read.
 **Rejected.** Relaxing `isMember()` globally — that makes every org readable by
 anyone signed in, which is exactly the tenant leak hard rule 2 exists to prevent,
 and it would not have been reversible by deleting one function.
+
+---
+
+## ADR-017 — Google Drive integration is link-first, not upload-first
+
+**Date.** 2026-07-29 · **Status.** Accepted
+
+**Context.** SPEC_STORAGE and ROADMAP 1.9 describe a Drive upload pipeline:
+`mintUploadSession` server-side, resumable `PUT` from the browser, then
+`completeUpload`. Minting a session needs a service credential, which needs a
+Cloud Function, which needs the Blaze plan. The project is deliberately on
+Spark. So the documented pipeline cannot exist yet, and the choice was between
+shipping nothing and shipping a different shape.
+
+**Decision.** File references are created from a **pasted Drive share link**.
+`core/drive/links.ts` parses every URL shape Google emits, derives the file id,
+and builds a `FileRef`. Images render through `drive.google.com/thumbnail?id=…`,
+which is Google's own CDN and what Drive's own UI uses.
+
+**Consequences.**
+
+* No OAuth consent screen, no client id, no Google verification review, and
+  nothing to configure before it works.
+* The file never leaves its owner's Drive, so we inherit their quota, retention
+  and access control instead of underwriting it — hard rule 5 taken further than
+  the original design took it.
+* There is no upload to fail at a submission deadline, which is the slowest and
+  most failure-prone moment in a challenge.
+* **Nothing can verify the file exists or is shared.** Only an authenticated
+  Drive API call could. `analyzeDriveLink` is therefore explicit about what it
+  knows versus what it guesses: a `/u/0/` or `usp=drive_web` URL raises a
+  warning because it very often is not link-shared, and the organiser sees their
+  own cover fine while every participant sees a broken one.
+* Broken images degrade to the category gradient rather than a torn-icon box
+  (`shared/ui/CoverImage.tsx`). A dead link looks unset, not broken.
+* `sizeBytes` is stored as `0` and mime type is inferred from the link shape.
+  An honest zero beats a confident wrong number.
+
+**Rejected.** `uc?export=view` for images — it returns an interstitial HTML page
+for larger files and is aggressively rate-limited, so it works in development
+and fails under real traffic. Firebase Storage — stores bytes on our own infra,
+breaking the cost invariant, and needs Blaze on new projects anyway.
+
+**Revisit when** billing is enabled: the full resumable pipeline becomes
+possible, and the Google Picker can sit on top of this without changing `FileRef`.
+
+---
+
+## ADR-018 — `collectionGroup` for "my registrations", with a path re-check
+
+**Date.** 2026-07-29 · **Status.** Accepted
+
+**Context.** A participant's dashboard needs every registration they hold across
+challenges. Reading each challenge's `registrations` subcollection is N reads for
+N challenges. CLAUDE.md hard rule 2 requires a `collectionGroup` query to carry
+an explicit security-rule justification recorded here.
+
+**Decision.** `fetchMyRegistrations` issues one `collectionGroup('registrations')`
+query filtered by `userId == uid()`, then **re-asserts the org boundary in code**
+by filtering on `ref.path.startsWith('organizations/{orgId}/')`.
+
+**Consequences.**
+
+* One query instead of N, and it stays one as the org grows.
+* A collection-group query spans tenants by definition, so the boundary is
+  enforced twice: the rules only permit reading a registration whose `userId`
+  is yours, and the client discards anything outside the active org. Neither
+  check is load-bearing on its own.
+
+**Two things that are easy to get wrong here, and both were, initially:**
+
+1. **The nested rule does not apply.** A `match /organizations/{orgId}/…
+   /registrations/{rid}` block never matches a `collectionGroup()` query — only
+   a root-level `match /{path=**}/registrations/{rid}` does. Without that block
+   the query fails with permission-denied regardless of what the nested rules
+   permit.
+2. **The condition must test a field, not the document id.** For a *list*
+   operation Firestore evaluates rules against the query's constraints, not
+   against documents it has not read yet. `rid == uid()` is unverifiable in that
+   context and denies everything; `resource.data.userId == uid()` is satisfied
+   by the query's own `where('userId', '==', uid)` filter. The two look
+   interchangeable because `registrationId == userId` in individual mode — they
+   are not.
+
+Also requires the `userId` field indexed at **`COLLECTION_GROUP`** scope.
+Firestore's automatic single-field indexes are `COLLECTION`-scoped only, so this
+needs an explicit `fieldOverrides` entry in `firestore.indexes.json`.
+
+---
+
+## ADR-019 — Denormalized counters are incremented by the client, bounded by rules
+
+**Date.** 2026-07-29 · **Status.** Accepted, with a known trade-off
+
+**Context.** DATA_MODEL §4 assigns `challenge.counters` to a Cloud Function,
+precisely because a client can lie about them. On Spark there is no Function.
+Registering has to move `counters.registrations`, and a challenge that
+permanently reads "0 entrants" while people are entering is a visible product
+failure — worse, day to day, than a number someone could inflate.
+
+**Decision.** `bumpCounter` uses Firestore's server-side atomic `increment()`.
+The security rule permits any signed-in user to update a challenge **only** when
+`affectedKeys().hasOnly(['counters', 'updatedAt'])`.
+
+**Consequences.**
+
+* Concurrent registrations do not lose updates — `increment()` is atomic
+  server-side, not a read-modify-write.
+* The blast radius is two keys. A participant cannot retitle, reschedule,
+  republish or unpublish a challenge through this door.
+* A member of that org could inflate a count. It is visible, bounded to their
+  own tenant, and fully recomputable from the registrations themselves.
+* A failing counter never fails the action that triggered it — `bumpCounter`
+  swallows its error, because the registration has already committed and a
+  courtesy number is not worth reporting a false failure over.
+
+**Revisit when** billing is enabled: move to a Function trigger and tighten the
+rule back to `hasPerm(orgId, 'challenge.update')`.
+
+---
+
+## ADR-020 — Admin access is bootstrapped by redeemable invites, not by a Function
+
+**Date.** 2026-07-29 · **Status.** Accepted
+
+**Context.** Someone has to be the first admin. Membership documents are what
+the rules read to decide permissions, so a client that can freely write its own
+membership can grant itself anything — the whole security model gone. Normally a
+Cloud Function or the Admin SDK writes that first member. Neither is available
+at runtime on Spark.
+
+**Decision.** An `invites/{lowercased-email}` document, writable only by someone
+holding `member.invite` (or by the seed script via the Admin SDK), carries the
+roles being granted. The invitee's first sign-in **redeems** it: the rules allow
+creating your own membership if and only if a pending invite exists for your
+**verified** token email, and the claimed `roleIds` and `resolvedPermissions`
+equal the invite's exactly.
+
+**Consequences.**
+
+* The client redeems a grant; it never mints one. It chooses nothing.
+* `email_verified == true` is required — without it, anyone able to set an
+  arbitrary email claim could redeem someone else's invite.
+* A member may update their own `displayName` and `photoURL` and nothing else;
+  `hasOnly` pins the privilege boundary shut.
+* This is real Phase 1.3 (member invite + roles), not scaffolding, and it
+  survives the deletion of the ADR-016 demo predicates.
+
+---
+
+## ADR-021 — Design tokens and the auth context move out of `app/`
+
+**Date.** 2026-07-29 · **Status.** Accepted
+
+**Context.** Turning on `eslint-plugin-boundaries` (Phase 0 deliverable 0.2)
+surfaced **21 violations** of the dependency direction CLAUDE.md documents.
+Every one had the same two causes: `app/tokens.ts` and the `useAuth` context in
+`app/providers/AppProviders.tsx` are needed by every module and every shared
+primitive, so both were imported *upwards* from `modules/` into `app/`.
+
+This is the same class of contradiction ADR-012 resolved: a doc naming a
+location the dependency rule forbids.
+
+**Decision.** Resolve it the same way — move the code, correct the doc.
+
+* `app/tokens.ts` → **`shared/design/tokens.ts`**. Tokens are a design-system
+  primitive consumed by every layer, which is exactly what `shared/` is for.
+* The auth context → **`core/auth/`**. Identity is a `core` concern that modules
+  consume; `app/` now only mounts the provider.
+
+**Consequences.**
+
+* The documented direction `app → modules → core → shared` is now true and
+  enforced rather than aspirational. All 21 violations were fixed, not excused.
+* React in `core/auth` is fine: hard rule 8 names the four *pure engines*
+  (`forms`, `workflow`, `rbac`, `judging`), not the whole directory, and
+  `core/firebase/hooks.ts` was already a React module for the same reason.
+  ESLint enforces purity on exactly those four directories.
+
+**Note worth keeping.** The boundary rule silently passed until
+`eslint-import-resolver-typescript` was configured — without it the `@app/…`
+aliases were unresolvable and every check trivially succeeded. A lint rule that
+*cannot* fail is worse than no rule, because it is believed. It was verified by
+confirming it reported the known violations before they were fixed.
+
+---
+
+## ADR-022 — Result publishing is idempotent rather than atomic
+
+**Date.** 2026-07-29 · **Status.** Accepted, with a known trade-off
+
+**Context.** SPEC_SCORING §5 assigns `publishResults` to a callable Cloud
+Function, and it is the strongest argument for Blaze in the whole product.
+Publishing touches more documents than one batch holds — a leaderboard page per
+50 entrants, a registration per entrant, a certificate per podium place, the
+challenge itself, an audit entry — and **a partial publish is the worst outcome
+available**: half the entrants told they won.
+
+On Spark there is no Function, so true atomicity is not on the table.
+
+**Decision.** Lean entirely on **idempotency** instead. Every document id is
+derived, never generated:
+
+| Document | Id |
+|---|---|
+| Leaderboard page | `page_{n}` |
+| Certificate | `{challengeId}_{userId}` |
+| Registration | `{userId}` |
+| Verification hash | `{challengeId}_{userId}` |
+
+A run that dies halfway can simply be run again: it converges on the same state
+rather than double-awarding. The UI says exactly that on the error path.
+
+**Consequences.**
+
+* Re-publishing is safe and is the documented recovery, so the failure mode is
+  "run it again" rather than "reconcile by hand".
+* Two security rules were relaxed, and this is the real cost:
+  * `leaderboard` — from `write: if false` to
+    `create, update: if hasPerm(orgId, 'result.publish')`. This is a
+    *privileged org member*, not any signed-in client, and `delete` stays false.
+  * `certificates` — from `write: if false` to
+    `create: if hasPerm(request.resource.data.orgId, 'certificate.issue')`.
+    Because this is a **global** collection the path carries no tenant, so the
+    permission is checked against the org named *in the payload*. A rules test
+    asserts a member of org A cannot mint a certificate claiming to be from
+    org B. `delete` stays false — revoke, never erase.
+* Notification fan-out happens **after** the write commits and is best-effort.
+  Telling someone they won and then failing to record it is far worse than
+  recording it and failing to tell them, which the inbox corrects on their next
+  visit.
+* The pure ranking engine (`core/judging`) is shared with the screen, so the
+  organiser previews the exact ranking that will be written before it is.
+* Publishing is **blocked behind an explicit acknowledgement** when any entry is
+  unscored or provisional. A missing review is never a zero, so publishing over
+  one ranks someone last for a judge's inaction — then freezes and announces it.
+
+**Revisit when** billing is enabled: move to a callable Function with a
+checkpoint document and `publishBatchId`, exactly as SPEC_SCORING §5 describes,
+and restore both rules to `write: if false`.
+
+---
+
+## ADR-023 — The rules file is cross-checked against the permission catalog
+
+**Date.** 2026-07-29 · **Status.** Accepted
+
+**Context.** A security rule can be wrong in a way nothing catches.
+`hasPerm(orgId, 'workspace.manage')` is valid rules syntax, compiles, and
+deploys without complaint — then denies every request forever, because
+`workspace.manage` is not in the catalog and so no role grants it. The catalog
+defines `workspace.create`, `.update` and `.delete`.
+
+That exact bug was live in this repo. Reading the rules did not find it.
+
+**Decision.** `core/rbac/rules-permissions.test.ts` reads `firestore.rules` as
+text, extracts every `hasPerm(_, 'x')` literal, and asserts each one:
+
+1. exists in `PERMISSIONS`,
+2. is granted by at least one built-in role — an unreachable rule is a bug, and
+3. is satisfiable by `owner`.
+
+It also pins the invariants a well-meaning edit would quietly undo: `snapshots`
+and `publicChallenges` stay unwritable, the score ledger stays append-only,
+audit logs stay write-once, invite redemption keeps requiring `email_verified`,
+and the ADR-019 counter hatch stays bounded to two keys.
+
+**Consequences.**
+
+* The two lists live in different languages and cannot be typechecked against
+  each other. This is the substitute, and it runs in `npm run test` rather than
+  needing an emulator.
+* The test asserts it found more than ten `hasPerm` calls, so a regex that stops
+  matching fails loudly instead of passing vacuously — the same trap ADR-021
+  records for the boundary rule.
+* One test deliberately asserts the **presence** of the ADR-016 demo
+  scaffolding. When it fails because the predicates are gone, delete the test —
+  the failure is the reminder.
