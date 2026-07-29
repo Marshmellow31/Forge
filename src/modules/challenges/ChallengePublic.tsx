@@ -1,8 +1,8 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Box, Button, Stack, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
-import { getChallengeBySlug, getOrg, getWorkspace, formSchemas, rubric } from '@mock/data';
-import { EmptyState, Blobs, Tag } from '@shared/ui/primitives';
+import { useChallengeBySlug, useOrg, useWorkspaces, useFormSchemas, useRubric } from '@core/firebase/hooks';
+import { EmptyState, Blobs, Tag, ListSkeleton } from '@shared/ui/primitives';
 import { allFields } from '@core/forms/compiler';
 import { c, radius, coverFor, mono, shadow } from '@app/tokens';
 
@@ -16,19 +16,24 @@ const STAGE_LOOK = {
 export default function ChallengePublic() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const ch = getChallengeBySlug(slug ?? '');
+  const { data: ch, isLoading } = useChallengeBySlug(slug);
+  const { data: org } = useOrg();
+  const { data: workspaces = [] } = useWorkspaces();
+  const { data: schemas = {} } = useFormSchemas();
+  const { data: rubric = [] } = useRubric(ch?.id);
+
+  if (isLoading) return <ListSkeleton rows={3} height={160} />;
   if (!ch) return <EmptyState icon="emoji_events" title="Challenge not found" />;
 
-  const org = getOrg(ch.orgId)!;
-  const ws = getWorkspace(ch.workspaceId);
-  const schema = formSchemas[ch.formSchemaId]!;
-  const fieldCount = allFields(schema).length;
+  const ws = workspaces.find((w) => w.id === ch.workspaceId);
+  const schema = schemas[ch.formSchemaId];
+  const fieldCount = schema ? allFields(schema).length : 0;
   const closed = ch.status === 'completed';
 
   const facts = [
     { icon: 'group', label: 'Registered', value: `${ch.counters.registrations} entrants` },
     { icon: 'upload_file', label: 'Submitted', value: `${ch.counters.submissions} entries` },
-    { icon: 'dynamic_form', label: 'Entry form', value: `v${schema.version} · ${fieldCount} fields` },
+    { icon: 'dynamic_form', label: 'Entry form', value: schema ? `v${schema.version} · ${fieldCount} fields` : '—' },
     { icon: 'emoji_events', label: 'Reward', value: ch.prize },
     { icon: 'visibility', label: 'Visibility', value: ch.visibility },
   ];
@@ -77,7 +82,7 @@ export default function ChallengePublic() {
             {ch.title}
           </Typography>
           <Typography sx={{ fontSize: 15, color: c.onPrimary, fontWeight: 600 }}>
-            {org.name}
+            {org?.name ?? ''}
             {ws && ` · ${ws.name}`}
           </Typography>
         </Box>

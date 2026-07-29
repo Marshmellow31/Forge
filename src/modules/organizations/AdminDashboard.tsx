@@ -3,10 +3,15 @@ import { Box, Button, Stack, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { StatTile, Eyebrow } from '@shared/ui/primitives';
 import { c, radius, mono } from '@app/tokens';
-import { challenges, activeOrg, auditLog } from '@mock/data';
+import { useChallenges, useOrg, useAuditLog } from '@core/firebase/hooks';
+import { QueryBoundary } from '@shared/ui/QueryBoundary';
 
 /** S-13 — Admin dashboard ("Organization" in the design). */
 export default function AdminDashboard() {
+  const { data: challenges = [], isLoading, error } = useChallenges();
+  const { data: activeOrg } = useOrg();
+  const { data: auditLog = [] } = useAuditLog();
+
   const totals = challenges.reduce(
     (acc, ch) => ({
       registrations: acc.registrations + ch.counters.registrations,
@@ -45,7 +50,7 @@ export default function AdminDashboard() {
     <>
       <Stack direction="row" alignItems="flex-end" justifyContent="space-between" flexWrap="wrap" gap={2} sx={{ mb: 3.5 }}>
         <Box>
-          <Eyebrow>{activeOrg.name} · {activeOrg.plan}</Eyebrow>
+          <Eyebrow>{activeOrg?.name ?? '…'} · {activeOrg?.plan ?? ''}</Eyebrow>
           <Typography variant="h2" sx={{ fontSize: 'clamp(30px, 3.8vw, 44px)', mt: 1 }}>Organization</Typography>
         </Box>
         <Button variant="contained" sx={{ height: 52 }} startIcon={<Icon name="add" size={20} />}>
@@ -53,6 +58,7 @@ export default function AdminDashboard() {
         </Button>
       </Stack>
 
+      <QueryBoundary isLoading={isLoading} error={error}>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 2, mb: 4 }}>
         <StatTile label="Live challenges" value={live.length} tone="primary" />
         <StatTile label="Registrations" value={totals.registrations} delta={12} />
@@ -114,6 +120,7 @@ export default function AdminDashboard() {
           </Stack>
         </Box>
       </Box>
+      </QueryBoundary>
     </>
   );
 }

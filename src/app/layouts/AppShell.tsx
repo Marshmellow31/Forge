@@ -3,7 +3,8 @@ import { Box, Stack, Typography, useMediaQuery } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { Icon } from '@shared/ui/Icon';
 import { c, radius, shadow, ease } from '@app/tokens';
-import { currentUser, activeOrg } from '@mock/data';
+import { useOrg } from '@core/firebase/hooks';
+import { useAuth } from '@app/providers/AppProviders';
 
 /**
  * The single application shell.
@@ -79,6 +80,11 @@ export default function AppShell() {
   const primaryLabel = inOrgContext ? 'New challenge' : 'Enter a challenge';
   const primaryTo = inOrgContext ? '/org/challenges' : '/discover';
   const screenTitle = SCREEN_TITLES.find((s) => s.test(pathname))?.title ?? 'Forge';
+  const { user } = useAuth();
+  const { data: org } = useOrg();
+  const displayName = user?.displayName ?? 'Demo Guest';
+  const initials = displayName.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+
   const showFab = !isDesktop && ['/home', '/discover', '/me/registrations'].includes(pathname);
 
   return (
@@ -184,12 +190,12 @@ export default function AppShell() {
             sx={{ flex: 'none', p: 1.5, borderRadius: `${radius.tile}px`, background: c.surfaceCard, border: `1px solid ${c.outline}` }}
           >
             <Box sx={{ width: 40, height: 40, borderRadius: '50%', background: c.inverse, color: c.primary, display: 'grid', placeItems: 'center', fontSize: 14, fontWeight: 700 }}>
-              HP
+              {initials}
             </Box>
             <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography noWrap sx={{ fontSize: 14, fontWeight: 600 }}>{currentUser.name}</Typography>
+              <Typography noWrap sx={{ fontSize: 14, fontWeight: 600 }}>{displayName}</Typography>
               <Typography sx={{ fontSize: 12, color: c.inkMuted }}>
-                {currentUser.points.toLocaleString()} pts · {activeOrg.name}
+                {org?.name ?? 'Loading…'}
               </Typography>
             </Box>
             <Icon name="unfold_more" size={20} color={c.inkMuted} />
@@ -257,7 +263,7 @@ export default function AppShell() {
                 <Box sx={{ position: 'absolute', top: 11, right: 12, width: 8, height: 8, borderRadius: '50%', background: c.error, border: `2px solid ${c.surface}` }} />
               </Box>
               <Box sx={{ width: 40, height: 40, borderRadius: '50%', background: c.inverse, color: c.primary, display: 'grid', placeItems: 'center', fontSize: 14, fontWeight: 700, ml: 0.5 }}>
-                HP
+                {initials}
               </Box>
             </Stack>
           </Stack>

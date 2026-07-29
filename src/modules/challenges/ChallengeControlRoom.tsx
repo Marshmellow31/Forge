@@ -3,8 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Alert, Box, Button, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import {
-  getChallenge, getWorkspace, registrations, submissions, leaderboard, rubric, formSchemas,
-} from '@mock/data';
+  useChallenge, useWorkspaces, useRegistrations, useSubmissions, useLeaderboard,
+  useRubric, useFormSchemas, useChallengeSnapshot,
+} from '@core/firebase/hooks';
+import { ListSkeleton } from '@shared/ui/primitives';
 import { StageStepper } from './components';
 import {
   StatTile, EmptyState, PersonCell, ScoreCell, StatusPill, SectionLabel, TableHead,
@@ -18,14 +20,21 @@ const TABS = ['Overview', 'Registrations', 'Submissions', 'Judging', 'Leaderboar
 export default function ChallengeControlRoom() {
   const { cid } = useParams();
   const navigate = useNavigate();
-  const ch = getChallenge(cid ?? '');
   const [tab, setTab] = useState(0);
+  // One pre-joined read fills registrations/submissions/rubric/leaderboard.
+  const { isLoading: snapLoading } = useChallengeSnapshot(cid);
+  const { data: ch, isLoading } = useChallenge(cid);
+  const { data: workspaces = [] } = useWorkspaces();
+  const { data: schemas = {} } = useFormSchemas();
+  const { data: regs = [] } = useRegistrations(cid);
+  const { data: subs = [] } = useSubmissions(cid);
+  const { data: rubric = [] } = useRubric(cid);
+  const { data: leaderboard = [] } = useLeaderboard(cid);
 
+  if (isLoading || snapLoading) return <ListSkeleton rows={3} height={140} />;
   if (!ch) return <EmptyState icon="warning" title="Challenge not found" />;
 
-  const schema = formSchemas[ch.formSchemaId]!;
-  const regs = registrations.filter((r) => r.challengeId === ch.id);
-  const subs = submissions.filter((s) => s.challengeId === ch.id);
+  const schema = schemas[ch.formSchemaId];
   const lateOffline = subs.filter((s) => s.clientSubmittedAt);
 
   return (
@@ -46,7 +55,7 @@ export default function ChallengeControlRoom() {
             <StatusPill status={ch.status} />
           </Stack>
           <Typography sx={{ fontSize: 14, color: c.inkMuted }}>
-            {getWorkspace(ch.workspaceId)?.name} · form {schema.id} v{schema.version} ·{' '}
+            {workspaces.find((w) => w.id === ch.workspaceId)?.name} · form {schema?.id ?? '—'} v{schema?.version ?? '?'} ·{' '}
             {ch.counters.submissions} of {ch.counters.registrations} submitted
           </Typography>
         </Box>

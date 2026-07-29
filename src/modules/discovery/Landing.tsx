@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Box, Button, Stack, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
-import { challenges } from '@mock/data';
+import { useChallenges } from '@core/firebase/hooks';
 import { ChallengeCard } from '@modules/challenges/components';
 import { Blobs, Eyebrow } from '@shared/ui/primitives';
 import { c, radius, ease } from '@app/tokens';
@@ -30,6 +30,8 @@ const PILLARS = [
 ];
 
 export default function Landing() {
+  const { data: challenges = [] } = useChallenges();
+
   return (
     <Box sx={{ background: c.surface, color: c.ink, minHeight: '100vh' }}>
       <Stack

@@ -3,7 +3,8 @@ import { Box, Button, Stack, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { Hero, Tag, Num, liftSx } from '@shared/ui/primitives';
 import { c, radius } from '@app/tokens';
-import { badges, certificates } from '@mock/data';
+import { useBadges, useCertificates } from '@core/firebase/hooks';
+import { QueryBoundary } from '@shared/ui/QueryBoundary';
 
 /** S-62 — Achievements. */
 
@@ -20,6 +21,8 @@ const BADGE_ICONS: Record<string, string> = {
 };
 
 export default function Awards() {
+  const { data: badges = [], isLoading, error } = useBadges();
+  const { data: certificates = [] } = useCertificates();
   const earned = badges.filter((b) => b.earned);
 
   return (
@@ -38,6 +41,7 @@ export default function Awards() {
         </Box>
       </Hero>
 
+      <QueryBoundary isLoading={isLoading} error={error}>
       <Typography variant="h6" sx={{ mb: 2 }}>Badges</Typography>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 1.5, mb: 4.5 }}>
         {badges.map((b) => (
@@ -104,6 +108,7 @@ export default function Awards() {
           </Stack>
         ))}
       </Stack>
+      </QueryBoundary>
     </>
   );
 }

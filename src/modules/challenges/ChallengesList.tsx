@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Button, Stack, Tab, Tabs, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
-import { challenges, getWorkspace } from '@mock/data';
+import { useChallenges, useWorkspaces } from '@core/firebase/hooks';
+import { QueryBoundary } from '@shared/ui/QueryBoundary';
 import { PageTitle, EmptyState, StatusPill, TableHead, tableRowSx, Num } from '@shared/ui/primitives';
 import { c, radius, coverFor } from '@app/tokens';
 
@@ -11,11 +12,14 @@ const TABS = ['All', 'draft', 'published', 'running', 'judging', 'completed'];
 /** S-26 — Admin challenges list. The design renders this as a list table. */
 export default function ChallengesList() {
   const [tab, setTab] = useState(0);
+  const { data: challenges = [], isLoading, error } = useChallenges();
+  const { data: workspaces = [] } = useWorkspaces();
+  const getWorkspace = (id: string) => workspaces.find((w) => w.id === id);
   const navigate = useNavigate();
 
   const rows = useMemo(
     () => challenges.filter((ch) => tab === 0 || ch.status === TABS[tab]),
-    [tab],
+    [tab, challenges],
   );
 
   return (
@@ -33,6 +37,7 @@ export default function ChallengesList() {
         ))}
       </Tabs>
 
+      <QueryBoundary isLoading={isLoading} error={error}>
       {rows.length === 0 ? (
         <EmptyState icon="emoji_events" title="No challenges here" body="Nothing in this state yet." />
       ) : (
@@ -75,6 +80,7 @@ export default function ChallengesList() {
           })}
         </Box>
       )}
+      </QueryBoundary>
     </>
   );
 }

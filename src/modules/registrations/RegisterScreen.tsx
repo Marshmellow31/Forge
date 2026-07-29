@@ -5,17 +5,18 @@ import {
   DialogContent, Stack, Typography,
 } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
-import { getChallengeBySlug, formSchemas } from '@mock/data';
+import { useChallengeBySlug, useFormSchemas } from '@core/firebase/hooks';
 import { FormRenderer, useFormEngine } from '@modules/forms/FormRenderer';
 import { stripHiddenAnswers } from '@core/forms/conditions';
-import { EmptyState, Tag } from '@shared/ui/primitives';
+import { EmptyState, Tag, ListSkeleton } from '@shared/ui/primitives';
 import { c, radius, mono } from '@app/tokens';
 
 /** S-54 — Registration form, rendered entirely from a stored schema. */
 export default function RegisterScreen() {
   const { slug } = useParams();
-  const challenge = getChallengeBySlug(slug ?? '');
-  const schema = challenge ? formSchemas[challenge.formSchemaId] : undefined;
+  const { data: challenge, isLoading } = useChallengeBySlug(slug);
+  const { data: schemas = {} } = useFormSchemas();
+  const schema = challenge ? schemas[challenge.formSchemaId] : undefined;
   const [done, setDone] = useState(false);
 
   // Hooks must run unconditionally — fall back to an empty schema when missing.
@@ -23,6 +24,7 @@ export default function RegisterScreen() {
     schema ?? { id: '', orgId: '', version: 0, status: 'draft', title: '', description: null, sections: [], settings: { allowDrafts: false, showProgressBar: false, confirmationMessage: null } },
   );
 
+  if (isLoading) return <ListSkeleton rows={3} height={90} />;
   if (!challenge || !schema) return <EmptyState icon="search_off" title="Form not found" />;
 
   const stored = stripHiddenAnswers(schema, engine.answers);

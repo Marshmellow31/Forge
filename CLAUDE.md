@@ -23,6 +23,7 @@ It is a **router**, not a spec. Load only the doc your task actually needs.
 | File uploads, Google Drive, providers | [docs/SPEC_STORAGE.md](docs/SPEC_STORAGE.md) |
 | Judging, rubrics, leaderboards, rewards, certificates | [docs/SPEC_SCORING.md](docs/SPEC_SCORING.md) |
 | Offline, sync queue, PWA | [docs/SPEC_OFFLINE.md](docs/SPEC_OFFLINE.md) |
+| Colour, spacing, icons, shells, "how should this look?" | `src/app/tokens.ts` + [docs/CONVENTIONS.md §7](docs/CONVENTIONS.md) |
 | Code style, naming, query keys, testing | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) |
 | "Why is it built this way?" | [docs/DECISIONS.md](docs/DECISIONS.md) |
 | Phase/feature sequencing | [docs/ROADMAP.md](docs/ROADMAP.md) |
@@ -83,9 +84,19 @@ app/  ──▶  modules/  ──▶  core/  ──▶  shared/
 
 ## Stack (do not substitute without an ADR)
 
-React 19 · Vite · TypeScript (strict) · Tailwind · MUI · React Router ·
+**Target:** React 19 · Vite · TypeScript (strict) · Tailwind · MUI · React Router ·
 React Hook Form + Zod · TanStack Query · Framer Motion · Workbox + IndexedDB (Dexie) ·
 Firebase Auth / Firestore / FCM · Cloud Functions (minimal) · Google Drive API · Vercel
+
+**Actually installed today** (Phase 1 demo, no backend): React **18** · Vite ·
+TS strict · Tailwind v4 (no preflight, ADR-014) · MUI 6 · React Router · Zod.
+Deliberately absent for now: TanStack Query (mock data is synchronous), React
+Hook Form (ADR-013 — a bespoke `useFormEngine` instead, flagged for revisit),
+Framer Motion (CSS keyframes instead), Firebase, Dexie, Workbox.
+
+**Look and feel:** the Forge design system — Material Design 3 expressive, warm
+amber — imported from a Claude Design project. Tokens in `src/app/tokens.ts`,
+theme in `src/app/theme.ts`, icons are Material Symbols Rounded. See ADR-015.
 
 ---
 

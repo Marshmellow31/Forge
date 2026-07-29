@@ -4,7 +4,8 @@ import { Box, Button, Stack, Tab, Tabs, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { PageTitle, StatusPill, EmptyState, Num, liftSx } from '@shared/ui/primitives';
 import { c, radius, coverFor } from '@app/tokens';
-import { challenges, submissions } from '@mock/data';
+import { useChallenges, useSubmissions } from '@core/firebase/hooks';
+import { QueryBoundary } from '@shared/ui/QueryBoundary';
 
 /** S-55 — My entries. */
 
@@ -29,6 +30,10 @@ const CATEGORY_ICON: Record<string, string> = {
 export default function MyEntries() {
   const [tab, setTab] = useState<TabKey>('active');
   const navigate = useNavigate();
+  const { data: challenges = [], isLoading, error } = useChallenges();
+  // The demo user's entries live on the one challenge that has submissions.
+  const withSubs = challenges.find((ch) => ch.counters.submissions > 0);
+  const { data: submissions = [] } = useSubmissions(withSubs?.id);
 
   // Demo shape: the current user's entries are the first submission per challenge.
   const mine = challenges
@@ -51,6 +56,7 @@ export default function MyEntries() {
         ))}
       </Tabs>
 
+      <QueryBoundary isLoading={isLoading} error={error}>
       {rows.length === 0 ? (
         <EmptyState
           icon="inbox"
@@ -116,6 +122,7 @@ export default function MyEntries() {
           ))}
         </Stack>
       )}
+      </QueryBoundary>
     </>
   );
 }

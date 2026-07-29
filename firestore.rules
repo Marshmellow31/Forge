@@ -1,0 +1,197 @@
+rules_version = '2';
+
+// Firestore Security Rules — the enforcement layer.
+//
+// CLAUDE.md hard rule 3: the client is never the authority. Every client-side
+// permission check in the UI is UX only; this file is what actually holds.
+//
+// Structure follows DATA_MODEL.md §6. Tenant isolation is structural: tenant
+// data lives under organizations/{orgId}/… so a path cannot address another
+// tenant, and these rules only ever widen from "deny".
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+
+    function memberPath(orgId) {
+      return /databases/$(database)/documents/organizations/$(orgId)/members/$(uid());
+    }
+    function isMember(orgId) {
+      return isSignedIn()
+        && exists(memberPath(orgId))
+        && get(memberPath(orgId)).data.status == 'active';
+    }
+    function hasPerm(orgId, perm) {
+      return isMember(orgId) && perm in get(memberPath(orgId)).data.resolvedPermissions;
+    }
+
+    // ---- Demo scaffolding (ADR-016) --------------------------------------
+    // The public demo lets an unauthenticated visitor sign in as a guest and
+    // read one seeded organization. `isDemoOrg` is deliberately narrow: it
+    // names a single org id, grants READ ONLY, and never appears in a write
+    // rule. Remove this function and its call sites before a second real
+    // tenant exists.
+    function isDemoOrg(orgId) { return orgId == 'org_demo'; }
+    function demoReadable(orgId) { return isDemoOrg(orgId) && isSignedIn(); }
+
+    // A guest may self-issue a membership ONLY in the demo org, ONLY with the
+    // demoViewer role, and ONLY with an empty permission set. Any other shape
+    // is rejected, so this cannot be used to mint an admin.
+    function isSelfDemoMembership(orgId, memberId) {
+      return isDemoOrg(orgId)
+        && memberId == uid()
+        && request.resource.data.userId == uid()
+        && request.resource.data.roleIds == ['demoViewer']
+        && request.resource.data.resolvedPermissions.size() == 0
+        && request.resource.data.status == 'active';
+    }
+    // ----------------------------------------------------------------------
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      // `stats` is denormalized and Function-written; a client may never touch it.
+      allow create: if uid() == userId;
+      allow update: if uid() == userId
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['stats']);
+      allow delete: if false;
+    }
+
+    match /usernames/{username} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == uid();
+      allow update, delete: if false;
+    }
+
+    // Public verification URLs must resolve without org context.
+    match /certificates/{certId} {
+      allow read: if true;
+      allow write: if false;                    // Functions only
+    }
+
+    match /publicChallenges/{cid} {
+      allow read: if true;
+      allow write: if false;                    // Functions only
+    }
+
+    match /organizations/{orgId} {
+      allow read: if isMember(orgId) || demoReadable(orgId) || resource.data.status == 'active';
+      allow create: if isSignedIn() && request.resource.data.ownerId == uid();
+      allow update: if hasPerm(orgId, 'org.update');
+      allow delete: if false;
+
+      match /members/{memberId} {
+        allow read: if isMember(orgId) || demoReadable(orgId);
+        allow create: if hasPerm(orgId, 'member.manage')
+                      || isSelfDemoMembership(orgId, memberId);
+        allow update, delete: if hasPerm(orgId, 'member.manage');
+      }
+
+      match /workspaces/{wid} {
+        allow read: if isMember(orgId) || demoReadable(orgId);
+        allow write: if hasPerm(orgId, 'workspace.manage');
+      }
+
+      match /roles/{roleId} {
+        allow read: if isMember(orgId) || demoReadable(orgId);
+        allow write: if hasPerm(orgId, 'role.manage');
+      }
+
+      match /settings/{settingId} {
+        allow read: if isMember(orgId) || demoReadable(orgId);
+        allow write: if hasPerm(orgId, 'org.update');
+      }
+
+      // Published schemas are immutable — an edit creates version n+1.
+      // CLAUDE.md hard rule 6.
+      match /formSchemas/{schemaId} {
+        allow read: if isMember(orgId) || demoReadable(orgId);
+        allow create: if hasPerm(orgId, 'form.manage');
+        allow update: if hasPerm(orgId, 'form.manage') && resource.data.status == 'draft';
+        allow delete: if false;
+      }
+
+      // Pre-joined read-optimization documents. Read-only to clients; written
+      // only by the seed script via the Admin SDK, which bypasses rules.
+      match /snapshots/{snapshotId} {
+        allow read: if isMember(orgId) || demoReadable(orgId);
+        allow write: if false;
+      }
+
+      match /badges/{badgeId} {
+        allow read: if isMember(orgId) || demoReadable(orgId);
+        allow write: if hasPerm(orgId, 'reward.manage');
+      }
+
+      match /auditLogs/{logId} {
+        allow read: if hasPerm(orgId, 'audit.read') || demoReadable(orgId);
+        allow create: if isMember(orgId);
+        allow update, delete: if false;         // write-once
+      }
+
+      match /challenges/{cid} {
+        allow read: if isMember(orgId)
+                    || demoReadable(orgId)
+                    || resource.data.visibility == 'public';
+        allow create: if hasPerm(orgId, 'challenge.create');
+        allow update: if hasPerm(orgId, 'challenge.update');
+        allow delete: if hasPerm(orgId, 'challenge.delete');
+
+        // registrationId == userId in individual mode, so "one entry per user"
+        // is enforced by the path and needs no query.
+        match /registrations/{rid} {
+          allow read:   if rid == uid() || hasPerm(orgId, 'registration.read') || demoReadable(orgId);
+          allow create: if rid == uid() && request.resource.data.userId == uid();
+          allow update: if (rid == uid() && resource.data.status == 'pending')
+                        || hasPerm(orgId, 'registration.manage');
+          allow delete: if hasPerm(orgId, 'registration.manage');
+        }
+
+        match /submissions/{sid} {
+          allow read:   if resource.data.userId == uid()
+                        || hasPerm(orgId, 'submission.read')
+                        || demoReadable(orgId);
+          allow create: if request.resource.data.userId == uid();
+          // Once submitted it is frozen; only a draft is editable by its owner.
+          allow update: if resource.data.userId == uid() && resource.data.status == 'draft';
+          allow delete: if false;
+        }
+
+        match /reviews/{reviewId} {
+          allow read:   if hasPerm(orgId, 'review.read') || demoReadable(orgId);
+          allow create, update: if hasPerm(orgId, 'review.write')
+                                && request.resource.data.judgeId == uid();
+          allow delete: if false;
+        }
+
+        match /rubric/{criterionId} {
+          allow read: if isMember(orgId) || demoReadable(orgId)
+                      || get(/databases/$(database)/documents/organizations/$(orgId)/challenges/$(cid)).data.visibility == 'public';
+          allow write: if hasPerm(orgId, 'challenge.update');
+        }
+
+        // Append-only ledger — never overwrite a score. ADR-009.
+        match /scores/{scoreId} {
+          allow read:   if hasPerm(orgId, 'score.read') || demoReadable(orgId);
+          allow create: if hasPerm(orgId, 'score.write');
+          allow update, delete: if false;
+        }
+
+        // Materialized by a scheduled job, never computed in the browser.
+        match /leaderboard/{pageId} {
+          allow read: if isMember(orgId) || demoReadable(orgId)
+                      || get(/databases/$(database)/documents/organizations/$(orgId)/challenges/$(cid)).data.visibility == 'public';
+          allow write: if false;                // Functions only
+        }
+
+        match /announcements/{aid} {
+          allow read: if isMember(orgId) || demoReadable(orgId);
+          allow write: if hasPerm(orgId, 'challenge.update');
+        }
+      }
+    }
+
+    // Anything not matched above is denied. Do not add a catch-all.
+  }
+}

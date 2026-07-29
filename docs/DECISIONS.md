@@ -334,3 +334,36 @@ theme from those tokens and nothing else.
 the design's navigation model — the sidebar's whole point is that organizing and
 participating are one continuous surface — and it triples the cost of every
 future nav change.
+
+---
+
+## ADR-016 — Guest sign-in provisions a read-only membership in one demo org
+**Date:** 2026-07-29 · **Status:** Accepted — **demo scaffolding, must be removed**
+
+**Context.** The Vercel demo must show admin, judging and control-room screens
+to someone with no account. Those reads are gated behind org membership by
+DATA_MODEL.md §6, and correctly so — CLAUDE.md hard rule 3 says the client is
+never the authority. Three options existed: weaken the rules globally, ship the
+demo on mock data, or let a guest become a member of exactly one org.
+
+**Decision.** Firebase Auth anonymous sign-in provisions `users/{uid}` plus a
+membership in `VITE_DEMO_ORG_ID` carrying the `demoViewer` role and an **empty**
+`resolvedPermissions` array. `firestore.rules` contains a narrow
+`isSelfDemoMembership()` predicate that permits this self-issued write only when
+the org id matches the demo org, the member id equals the caller's uid, the role
+list is exactly `['demoViewer']`, and the permission set is empty. `demoReadable()`
+widens **reads only**, never writes.
+
+**Consequences.**
+* A guest can read the seeded demo org and nothing else. Every write path still
+  requires a real permission, so the demo cannot be used to mutate data.
+* This is the one place where a client self-issues a membership. It is a
+  privilege-escalation shape, made safe only by how narrow the predicate is —
+  **delete `isDemoOrg`, `demoReadable` and `isSelfDemoMembership` from
+  `firestore.rules`, and the guest button from `AppProviders`, before a second
+  real tenant exists.**
+* Anonymous accounts accumulate in Auth. Harmless for a demo; prune periodically.
+
+**Rejected.** Relaxing `isMember()` globally — that would make every org readable
+by anyone signed in, which is precisely the tenant leak CLAUDE.md hard rule 2
+exists to prevent, and it would not have been reversible by deleting one function.

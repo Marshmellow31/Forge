@@ -37,3 +37,10 @@ dist-ssr
 
 # Vercel
 .vercel
+
+# Firebase service account keys — NEVER commit these.
+# They grant full admin access to the project and bypass all security rules.
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+.firebase/
+firebase-debug.log

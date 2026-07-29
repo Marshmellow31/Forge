@@ -3,7 +3,7 @@ import { Box, Stack, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { c as t, radius, coverFor } from '@app/tokens';
 import { liftSx as lift } from '@shared/ui/primitives';
-import type { Challenge, Stage } from '@mock/data';
+import type { Challenge, Stage } from '@shared/types/domain';
 
 const STAGE_LOOK: Record<Stage['state'], { bg: string; fg: string; border: string; icon: string; fill: boolean; labelFg: string }> = {
   done: { bg: t.success, fg: t.successInk, border: 'transparent', icon: 'check', fill: true, labelFg: t.inkMuted },

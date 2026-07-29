@@ -66,10 +66,13 @@ go through a `core` contract or a shared type.
 src/
 ├── app/
 │   ├── main.tsx
-│   ├── App.tsx
-│   ├── router/                  route tree, lazy boundaries, guards
-│   ├── providers/               Query, Auth, Org, Theme, Offline, ErrorBoundary
-│   └── layouts/                 AdminLayout, ParticipantLayout, PublicLayout
+│   ├── App.tsx                  the route tree (no separate router/ yet — ADR-015)
+│   ├── tokens.ts                design tokens ◀ THE ONLY PLACE A HEX IS WRITTEN
+│   ├── theme.ts                 MUI theme, derived from tokens.ts
+│   ├── index.css                fonts, keyframes, base element styles
+│   ├── providers/               Query, Auth, Org, Offline, ErrorBoundary  (not built)
+│   └── layouts/
+│       └── AppShell.tsx         THE shell — sidebar on desktop, bottom nav on mobile
 │
 ├── modules/
 │   ├── auth/                    sign-in, session, account
@@ -85,8 +88,9 @@ src/
 │   ├── rewards/                 badges, points, certificates
 │   ├── notifications/
 │   ├── analytics/
+│   ├── participants/            participant home, my entries, awards
 │   ├── profile/                 public portfolio
-│   └── discovery/               public challenge browse
+│   └── discovery/               landing + public challenge browse
 │
 ├── core/
 │   ├── forms/                   field registry · schema types · zod compiler · condition evaluator
@@ -102,10 +106,16 @@ src/
 │   └── notifications/           fcm token lifecycle · channel abstraction
 │
 ├── shared/
-│   ├── ui/                      Button, Field, Dialog, DataTable, EmptyState…
+│   ├── ui/                      primitives.tsx (Hero, StatTile, StatusPill,
+│   │                            TableHead, EmptyState…) · Icon.tsx
 │   ├── hooks/                   useDebounce, useMediaQuery, useLocalStorage
 │   ├── utils/                   date, id, result<T,E>, assert, invariant
 │   └── types/                   branded ids, pagination, Result
+│
+├── mock/                        DEMO ONLY — in-memory orgs, challenges, schemas,
+│                                registrations, submissions. Deleted when the
+│                                Firebase data layer lands. Nothing in core/ may
+│                                import it.
 │
 └── config/                      env parsing (zod), feature flags, constants
 

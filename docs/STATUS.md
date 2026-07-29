@@ -37,7 +37,8 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
 - [x] Product vision, architecture, data model, engine specs, ADRs, conventions
 - [x] Repo scaffold — Vite 6, React 18, TS strict, Tailwind v4, MUI 6, Zod
 - [x] Path aliases (`@core`, `@modules`, `@shared`, `@app`, `@mock`)
-- [x] `npm install` — 159 packages, clean
+- [x] `npm install` — clean (`@types/node` added so `vite.config.ts` typechecks)
+- [x] Design system — imported, not hand-built. See ROADMAP 0.8 and ADR-015.
 - [ ] `eslint-plugin-boundaries` dependency rule (ESLint not configured at all yet)
 - [ ] Vitest + first unit tests **← the form engine has zero tests, and it is the
       one thing in this repo that most needs them**
@@ -123,6 +124,7 @@ Not started. See [ROADMAP.md](ROADMAP.md).
 | Q5 | Teams in MVP or Phase 2? | Registration shape | Phase 2; `Registration.team` exists from day one so no migration |
 | Q6 | White-label / custom domains timing | Hosting + branding | Phase 3 |
 | **Q7** | **Keep `useFormEngine`, or move to React Hook Form as CONVENTIONS §6 mandates?** | The demo deviates from the documented stack — see ADR-013 | Revisit before the backend lands; do not build more forms on it until decided |
+| **Q8** | **Is the product called ChallengeOS or Forge?** | The running app, the `<title>`, the repo directory and the imported design system all say **Forge**; every doc (README, BRAIN, CLAUDE) says **ChallengeOS**. Both names are currently shipping. | Unresolved — **not renamed unilaterally.** Pick one, then sweep the docs or the UI to match |
 
 ## 5. Known risks
 

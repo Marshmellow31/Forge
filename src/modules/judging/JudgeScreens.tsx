@@ -4,16 +4,31 @@ import {
   Box, Button, Dialog, DialogActions, DialogContent, Slider, Stack, TextField, Typography,
 } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
-import { submissions, rubric } from '@mock/data';
-import { PageTitle, EmptyState, StatTile, Num, Tag, liftSx } from '@shared/ui/primitives';
+import { useChallenges, useSubmissions, useRubric, useChallengeSnapshot } from '@core/firebase/hooks';
+import { QueryBoundary } from '@shared/ui/QueryBoundary';
+import { PageTitle, EmptyState, StatTile, Num, Tag, liftSx, ListSkeleton } from '@shared/ui/primitives';
 import { c, radius, coverFor, mono } from '@app/tokens';
 
-const queue = submissions.filter((s) => s.reviewsDone < s.reviewsTotal);
+/**
+ * The judged challenge for this demo: the first one actually in judging.
+ * A real judge queue is driven by assignment (reviews where judgeId == me),
+ * which needs the assignment pipeline — see STATUS.md.
+ */
+function useJudgeQueue() {
+  const { data: challenges = [] } = useChallenges();
+  const target = challenges.find((ch) => ch.status === 'judging') ?? challenges[0];
+  useChallengeSnapshot(target?.id);
+  const { data: submissions = [], isLoading, error } = useSubmissions(target?.id);
+  const { data: rubric = [] } = useRubric(target?.id);
+  const queue = submissions.filter((s) => s.reviewsDone < s.reviewsTotal);
+  return { submissions, queue, rubric, isLoading, error };
+}
 
 /** S-46 — Judging queue. */
 export function JudgeQueue() {
+  const { submissions, queue, isLoading, error } = useJudgeQueue();
   const done = submissions.length - queue.length;
-  const pct = Math.round((done / submissions.length) * 100);
+  const pct = submissions.length ? Math.round((done / submissions.length) * 100) : 0;
   const navigate = useNavigate();
   const next = queue[0];
 
@@ -26,6 +41,7 @@ export function JudgeQueue() {
         </Typography>
       </Stack>
 
+      <QueryBoundary isLoading={isLoading} error={error}>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 2, mb: 3 }}>
         <StatTile label="Assigned" value={submissions.length} />
         <StatTile label="Remaining" value={queue.length} tone="primary" />
@@ -111,6 +127,7 @@ export function JudgeQueue() {
           ))}
         </Box>
       )}
+      </QueryBoundary>
     </>
   );
 }
@@ -119,6 +136,7 @@ export function JudgeQueue() {
 export function ScoringScreen() {
   const { sid } = useParams();
   const nav = useNavigate();
+  const { queue, rubric, isLoading } = useJudgeQueue();
   const idx = queue.findIndex((s) => s.id === sid);
   const sub = queue[idx];
   const [scores, setScores] = useState<Record<string, number>>({});
@@ -126,6 +144,7 @@ export function ScoringScreen() {
   const [recuse, setRecuse] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  if (isLoading) return <ListSkeleton rows={2} height={220} />;
   if (!sub) return <EmptyState icon="search_off" title="Submission not found" />;
 
   const weighted = rubric.reduce((sum, r) => sum + ((scores[r.id] ?? 0) / r.max) * r.weight * 100, 0);

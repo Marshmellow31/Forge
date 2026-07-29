@@ -30,9 +30,18 @@ contest. Organizations configure it rather than requesting a feature.
 
 ## Status
 
-**Phase 0 — Foundation.** Specification complete, application code not yet
-started. See [docs/STATUS.md](docs/STATUS.md) for live state and the next three
-actions.
+**Phase 1 — MVP frontend, demo mode.** A running React app with no backend: the
+form engine is real (schema types, condition evaluator, Zod compiler, field
+registry), fourteen screens are built on the imported **Forge design system**
+(Material Design 3, warm amber), and all data comes from `src/mock/`. Firebase,
+auth, security rules and CI are still Phase 0 items and have not started.
+
+`npm run dev` works. `npm run typecheck` and `npm run build` are clean.
+
+The one thing to know before touching the form engine: **it has no tests yet**,
+and it decides validation for every challenge on the platform.
+
+See [docs/STATUS.md](docs/STATUS.md) for live state and the next three actions.
 
 ## Documentation
 
