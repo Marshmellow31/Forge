@@ -70,7 +70,16 @@ function explain(err: unknown): string | null {
     case 'auth/unauthorized-domain':
       return 'This domain is not authorized for sign-in. Add it under Firebase console → Authentication → Settings → Authorized domains.';
     case 'auth/operation-not-allowed':
-      return 'That sign-in method is not enabled on this Firebase project. Enable it under Authentication → Sign-in method.';
+      return 'That sign-in method is not enabled on this Firebase project. Enable it under Firebase console → Authentication → Sign-in method.';
+    // The raw code reads as a client bug and sends people looking through their
+    // own code. It is not: it means Authentication was never switched on for
+    // the project at all, which is one click in the console and impossible to
+    // guess from "configuration not found".
+    case 'auth/configuration-not-found':
+      return 'Sign-in is not set up on this Firebase project yet. Open the Firebase console → Build → Authentication → Get started, then enable the Google and Anonymous providers. Reading works without this; only signing in needs it.';
+    case 'auth/invalid-api-key':
+    case 'auth/api-key-not-valid':
+      return 'The Firebase API key is wrong or belongs to a different project. Check VITE_FIREBASE_API_KEY against Firebase console → Project settings → Your apps.';
     case 'auth/network-request-failed':
       return 'Could not reach the sign-in service. Check your connection and try again.';
     case 'auth/too-many-requests':

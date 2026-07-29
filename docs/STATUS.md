@@ -8,10 +8,10 @@
 
 **Last updated:** 2026-07-29
 **Updated by:** Claude (production hardening — writes, RBAC, Drive, tooling)
-**Current phase:** **Phase 1 complete.** All 17 features shipped; Phase 2 is next
+**Current phase:** **Phase 1 complete**, Phase 2 in progress (workflow engine + CSV export done)
 **Repo state:** 15 screens on live Firestore (project forge-4d40a, org_demo seeded); the app now **writes**
 **Build health:** typecheck clean · lint clean (0 errors, 0 warnings) ·
-**229 unit tests + 55 security-rules tests, all passing** · production build
+**314 unit tests + 65 security-rules tests, all passing** · production build
 clean, service worker generated · **22 routes walked in a real browser with 0
 console errors** · no route renders `NotBuiltYet` any more
 **Rules + indexes are DEPLOYED to `forge-4d40a`** (2026-07-29) and reads were
@@ -212,11 +212,32 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
 | 1.16 | Notifications | [x] **in-app**; push (FCM) deliberately out of scope |
 | 1.17 | Installable PWA | [x] **done** |
 
-### Phase 2 / 3
-Not started beyond what is listed above. See [ROADMAP.md](ROADMAP.md). Note that
-several Phase 3 items (webhooks, public REST API, enterprise SSO, Slack/Discord,
-AI review) **cannot** be built on Spark — they need a server to hold a secret and
-receive inbound requests. They are blocked on billing, not on effort.
+### Phase 2 — started
+
+- [x] **`core/workflow`** — the last unbuilt pure engine. 49 tests. Expresses all
+      four shapes SPEC_WORKFLOW_ENGINE §1 demands (simple, multi-round, ongoing,
+      voting) as **the same code path with different documents**. Clock and
+      random seed are injected, so advancement is reproducible — an appeal can
+      be re-adjudicated from the same inputs months later, and every decision
+      carries a human-readable `reason`.
+- [x] **CSV export** — registrations, submissions and scores, redacted by
+      `piiLevel` by default. Formula injection (`=`, `+`, `-`, `@`, DDE
+      payloads) is neutralised on every cell; an exported registrant list is
+      untrusted input. 36 tests.
+- [x] **Certificates** — issued by publishing, with a public verification page
+- [x] **Public challenge discovery** — Discover screen
+- [x] **Analytics dashboard**
+- [ ] Workflow designer UI (the engine is done; only the designer is missing)
+- [ ] Teams · community voting · blind judging end-to-end · QR check-in ·
+      custom roles · challenge templates · public org pages · remaining field types
+
+### Phase 3
+Several items **cannot** be built on Spark — webhooks, a public REST API,
+enterprise SSO, Slack/Discord delivery and AI review all need a server to hold a
+secret or receive an inbound request. They are blocked on billing, not effort.
+
+**All four pure engines named in CLAUDE.md hard rule 8 now exist and are tested:**
+`core/forms` (86) · `core/workflow` (49) · `core/rbac` (44) · `core/judging` (32).
 
 ## 3. Next three actions (in order)
 

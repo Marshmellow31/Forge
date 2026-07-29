@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Box, Button, Divider, Popover, Stack, Typography } from '@mui/material';
 import { Icon } from './Icon';
 import { useAuth } from '@core/auth';
@@ -32,7 +32,7 @@ const TYPE_ICON: Record<string, string> = {
 export function NotificationBell() {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const nav = useNavigate();
-  const { user, signIn } = useAuth();
+  const { user } = useAuth();
   const { data: notifications = [], isLoading } = useNotifications(user?.uid);
   const markRead = useMarkNotificationRead(user?.uid);
   const markAll = useMarkAllNotificationsRead(user?.uid);
@@ -111,7 +111,18 @@ export function NotificationBell() {
                 Sign in to get notified when your entry is received, a deadline is close, or results
                 are published.
               </Typography>
-              <Button variant="contained" size="small" onClick={() => void signIn()}>Sign in</Button>
+              {/* Routes to the front door rather than minting an anonymous
+                  account: the project may not have Anonymous enabled, and
+                  choosing a surface is what actually orients someone. */}
+              <Button
+                variant="contained"
+                size="small"
+                component={Link}
+                to="/welcome"
+                onClick={() => setAnchor(null)}
+              >
+                Sign in
+              </Button>
             </Stack>
           ) : isLoading ? (
             <Typography sx={{ p: 4, textAlign: 'center', fontSize: 14, color: c.inkFaint }}>

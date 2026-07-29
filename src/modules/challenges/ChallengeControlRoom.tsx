@@ -7,6 +7,7 @@ import {
   useRubric, useFormSchemas, useChallengeSnapshot,
 } from '@core/firebase/hooks';
 import { ListSkeleton } from '@shared/ui/primitives';
+import { ExportMenu } from '@shared/ui/ExportMenu';
 import { StageStepper } from './components';
 import {
   StatTile, EmptyState, PersonCell, ScoreCell, StatusPill, SectionLabel, TableHead,
@@ -72,6 +73,21 @@ export default function ChallengeControlRoom() {
             Form builder
           </Button>
           <Button variant="outlined" component={Link} to={`/c/${ch.slug}`}>Public page</Button>
+          <ExportMenu
+            challengeSlug={ch.slug}
+            schema={schema}
+            blind={ch.leaderboardMode === 'hidden'}
+            registrations={regs.map((r) => ({
+              id: r.id, name: r.name, email: r.email, status: r.status,
+              registeredAt: r.registeredAt, checkedIn: r.checkedIn, answers: r.answers,
+            }))}
+            submissions={subs.map((s) => ({
+              id: s.id, participant: s.participant, anonymizedLabel: s.anonymizedLabel,
+              stageKey: s.stageKey, status: s.status, submittedAt: s.submittedAt,
+              isLate: s.isLate, fileCount: s.fileCount, reviewsDone: s.reviewsDone,
+              reviewsTotal: s.reviewsTotal, score: s.score, isProvisional: s.isProvisional,
+            }))}
+          />
           <Button
             component={Link}
             to={`/org/challenges/${ch.id}/publish`}
