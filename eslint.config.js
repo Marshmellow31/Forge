@@ -184,7 +184,7 @@ export default tseslint.config(
   },
 
   {
-    files: ['**/*.test.{ts,tsx}', 'tests/**/*.ts', 'scripts/**/*.ts', 'functions/**/*.{ts,mjs}'],
+    files: ['**/*.test.{ts,tsx}', 'tests/**/*.ts', 'scripts/**/*.{ts,mjs}', 'functions/**/*.{ts,mjs}'],
     languageOptions: { globals: { ...globals.node } },
     rules: {
       'boundaries/element-types': 'off',

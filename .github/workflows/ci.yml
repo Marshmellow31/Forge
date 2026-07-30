@@ -45,6 +45,12 @@ jobs:
       - name: Unit tests
         run: npm run test
 
+      # Two production deploys failed in a row on vercel.json, and neither was
+      # visible locally — it is valid JSON that nothing imports and no test
+      # touched. Vercel validating it was the first signal. Now this is.
+      - name: Validate vercel.json
+        run: npm run validate:vercel
+
       # The build is a real check: it catches things typecheck does not, such as
       # a dynamic import that cannot be resolved or a PWA manifest that fails to
       # generate.
