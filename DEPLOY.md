@@ -102,8 +102,13 @@ You should land on the sign-in door → **Continue as guest** → the demo data.
 
 ## 4. Deploy to Vercel
 
-Import the repo, branch `feat/firebase-backend`. `vercel.json` already sets the
-build command, output directory and the SPA rewrite.
+Import the repo, branch `main`. `vercel.json` already sets the build command,
+output directory and the SPA rewrite.
+
+⚠️ **Do not add `$comment` keys inside `vercel.json`.** Vercel validates it
+against a strict schema that rejects unknown properties on `headers[]` and
+`rewrites[]` entries, and the deployment fails before the build starts. The
+reasoning for each rule lives below instead.
 
 Add the **same seven variables** from `.env.local` to
 **Vercel → Settings → Environment Variables** (all environments), except set:
