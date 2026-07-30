@@ -4,9 +4,15 @@ import { Icon } from '@shared/ui/Icon';
 import {
   Hero, StatTile, SectionLabel, ProgressBar, StatusPill, EmptyState, liftSx,
 } from '@shared/ui/primitives';
-import { ChallengeCard, StageStepper } from '@modules/challenges/components';
-import { c, radius, ease } from '@app/tokens';
-import { challenges, currentUser, badges, certificates } from '@mock/data';
+import { StageStepper } from '@shared/ui/StageStepper';
+import { ChallengeCard } from '@shared/ui/ChallengeCard';
+import { c, radius, ease } from '@shared/design/tokens';
+import { useChallenges, useBadges, useCertificates, useCurrentUser } from '@core/firebase/hooks';
+import { useAuth } from '@core/auth';
+
+/** The profile seeded into the index snapshot for the signed-out demo. */
+const DEMO_USER_ID = 'u_self';
+import { QueryBoundary } from '@shared/ui/QueryBoundary';
 
 const BADGE_ICONS: Record<string, string> = {
   b1: 'rocket_launch',
@@ -21,6 +27,15 @@ const BADGE_ICONS: Record<string, string> = {
 /** S-51 — Participant dashboard ("Home" in the design). */
 export default function ParticipantDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { data: challenges = [], isLoading, error } = useChallenges();
+  const { data: badges = [] } = useBadges();
+  const { data: certificates = [] } = useCertificates();
+  // No sign-in on the public demo, so fall back to the seeded demo profile
+  // that travels in the index snapshot. See ADR-016.
+  const { data: profile } = useCurrentUser(user?.uid ?? DEMO_USER_ID);
+  const displayName = user?.displayName ?? profile?.name ?? 'there';
+  const stats = profile ?? { points: 0, streakDays: 0, challengesEntered: 0, challengesWon: 0 };
   const active = challenges.filter((ch) => ch.status === 'running' || ch.status === 'judging');
   const open = challenges.filter((ch) => ch.status === 'published').slice(0, 3);
   const earned = badges.filter((b) => b.earned);
@@ -37,7 +52,7 @@ export default function ParticipantDashboard() {
         >
           {active.length} deadline{active.length === 1 ? '' : 's'}
           <br />
-          this week, {currentUser.name.split(' ')[0]}.
+          this week, {displayName.split(' ')[0]}.
         </Typography>
         <Typography sx={{ fontSize: 16, lineHeight: 1.55, color: c.inkMuted, maxWidth: '44ch', mb: 3.5 }}>
           Everything you have entered, everything still open, and what the judges have sent back — in one place.
@@ -64,11 +79,12 @@ export default function ParticipantDashboard() {
         </Stack>
       </Hero>
 
+      <QueryBoundary isLoading={isLoading} error={error}>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 2, mb: 4.5 }}>
-        <StatTile label="Points" value={currentUser.points.toLocaleString()} icon="bolt" />
-        <StatTile label="Day streak" value={currentUser.streakDays} icon="local_fire_department" />
-        <StatTile label="Challenges entered" value={currentUser.challengesEntered} icon="assignment" />
-        <StatTile label="Wins" value={currentUser.challengesWon} icon="emoji_events" />
+        <StatTile label="Points" value={stats.points.toLocaleString()} icon="bolt" />
+        <StatTile label="Day streak" value={stats.streakDays} icon="local_fire_department" />
+        <StatTile label="Challenges entered" value={stats.challengesEntered} icon="assignment" />
+        <StatTile label="Wins" value={stats.challengesWon} icon="emoji_events" />
       </Box>
 
       <SectionLabel action={<Button size="small" variant="text" component={Link} to="/me/registrations">All entries</Button>}>
@@ -173,6 +189,7 @@ export default function ParticipantDashboard() {
           ))}
         </Stack>
       </Box>
+      </QueryBoundary>
     </>
   );
 }

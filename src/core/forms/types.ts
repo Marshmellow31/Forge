@@ -20,7 +20,18 @@ export type FieldType =
   | 'url'
   | 'githubRepo'
   | 'file'
-  | 'files';
+  | 'files'
+  /* Phase 2 additions — purely additive via the registry. */
+  | 'phone'
+  | 'time'
+  | 'datetime'
+  | 'currency'
+  | 'slider'
+  | 'linearScale'
+  | 'ranking'
+  | 'driveLink'
+  | 'videoUrl'
+  | 'address';
 
 export interface FieldOption {
   id: string;

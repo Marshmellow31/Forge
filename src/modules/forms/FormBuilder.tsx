@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   Box, Button, Checkbox, FormControlLabel, IconButton, MenuItem, Stack, Tab, Tabs, TextField,
@@ -7,10 +7,17 @@ import {
 import { Icon } from '@shared/ui/Icon';
 import type { FormField, FormSchema, FieldType } from '@core/forms/types';
 import { listFieldTypes, getFieldType } from '@core/forms/registry';
-import { getChallenge, formSchemas } from '@mock/data';
-import { FormRenderer, useFormEngine } from './FormRenderer';
-import { EmptyState, Tag, Eyebrow } from '@shared/ui/primitives';
-import { c, radius, ease, mono } from '@app/tokens';
+import { useChallenge, useFormSchemas } from '@core/firebase/hooks';
+import { usePublishSchema } from '@core/firebase/mutations';
+import { useAuth } from '@core/auth';
+import { FormRenderer, useFormEngine } from '@shared/ui/forms/FormRenderer';
+import { EmptyState, Tag, Eyebrow, ListSkeleton } from '@shared/ui/primitives';
+import { c, radius, ease, mono } from '@shared/design/tokens';
+
+const EMPTY_SCHEMA: FormSchema = {
+  id: '', orgId: '', version: 0, status: 'draft', title: '', description: null,
+  sections: [], settings: { allowDrafts: false, showProgressBar: false, confirmationMessage: null },
+};
 
 let seq = 1000;
 const newId = () => `f_${seq++}`;
@@ -56,49 +63,67 @@ function blankField(type: FieldType, order: number): FormField {
 /** S-30 — Form builder. Palette / canvas / field settings, per the design. */
 export default function FormBuilder() {
   const { cid } = useParams();
-  const challenge = getChallenge(cid ?? '');
-  const [schema, setSchema] = useState<FormSchema>(() =>
-    structuredClone(formSchemas[challenge?.formSchemaId ?? 'fs_photo']!),
-  );
-  const [selectedId, setSelectedId] = useState<string | null>(schema.sections[0]?.fields[0]?.id ?? null);
+  const { data: challenge, isLoading } = useChallenge(cid);
+  const { data: schemas = {} } = useFormSchemas();
+  const remote = challenge ? schemas[challenge.formSchemaId] : undefined;
+
+  // The builder edits a local draft. Publishing it back to Firestore needs the
+  // versioning write path (hard rule 6) — see STATUS.md.
+  const [schema, setSchema] = useState<FormSchema | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (remote && !schema) {
+      const draft = structuredClone(remote);
+      setSchema(draft);
+      setSelectedId(draft.sections[0]?.fields[0]?.id ?? null);
+    }
+  }, [remote, schema]);
+  const { user } = useAuth();
+  const publish = usePublishSchema();
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [cfgTab, setCfgTab] = useState(0);
 
-  const previewEngine = useFormEngine(schema);
+  const previewEngine = useFormEngine(schema ?? EMPTY_SCHEMA);
   const types = useMemo(() => listFieldTypes(), []);
+
+  if (isLoading) return <ListSkeleton rows={3} height={120} />;
+  if (!challenge) return <EmptyState icon="search_off" title="Challenge not found" />;
+  if (!schema) return <EmptyState icon="description" title="No form schema for this challenge" />;
 
   const selected = schema.sections.flatMap((s) => s.fields).find((f) => f.id === selectedId) ?? null;
   const totalFields = schema.sections.reduce((n, s) => n + s.fields.length, 0);
 
   const mutateField = (id: string, patch: Partial<FormField>) =>
-    setSchema((prev) => ({
+    setSchema((prev) => (prev ? {
       ...prev,
       sections: prev.sections.map((s) => ({
         ...s,
         fields: s.fields.map((f) => (f.id === id ? { ...f, ...patch } : f)),
       })),
-    }));
+    } : prev));
 
   const addField = (type: FieldType) => {
-    const sectionId = schema.sections[0]!.id;
+    const sectionId = schema?.sections[0]?.id;
+    if (!sectionId) return;
     const f = blankField(type, 999);
-    setSchema((prev) => ({
+    setSchema((prev) => (prev ? {
       ...prev,
       sections: prev.sections.map((s) =>
         s.id === sectionId ? { ...s, fields: [...s.fields, { ...f, order: s.fields.length }] } : s,
       ),
-    }));
+    } : prev));
     setSelectedId(f.id);
   };
 
   const removeField = (id: string) =>
-    setSchema((prev) => ({
+    setSchema((prev) => (prev ? {
       ...prev,
       sections: prev.sections.map((s) => ({ ...s, fields: s.fields.filter((f) => f.id !== id) })),
-    }));
+    } : prev));
 
   const moveField = (sectionId: string, idx: number, dir: -1 | 1) =>
-    setSchema((prev) => ({
+    setSchema((prev) => (prev ? {
       ...prev,
       sections: prev.sections.map((s) => {
         if (s.id !== sectionId) return s;
@@ -108,9 +133,7 @@ export default function FormBuilder() {
         [fields[idx], fields[j]] = [fields[j]!, fields[idx]!];
         return { ...s, fields: fields.map((f, i) => ({ ...f, order: i })) };
       }),
-    }));
-
-  if (!challenge) return <EmptyState icon="search_off" title="Challenge not found" />;
+    } : prev));
 
   return (
     <>
@@ -138,8 +161,50 @@ export default function FormBuilder() {
         >
           {mode === 'edit' ? 'Preview' : 'Edit'}
         </Button>
-        <Button variant="contained">Publish v{schema.version + 1}</Button>
+        <Button
+          variant="contained"
+          disabled={publish.isPending}
+          onClick={() => publish.mutate({ schema, userId: user?.uid })}
+        >
+          {publish.isPending ? 'Publishing…' : `Publish v${schema.version + 1}`}
+        </Button>
       </Stack>
+
+      {publish.error && (
+        <Stack
+          direction="row"
+          gap={1.75}
+          alignItems="flex-start"
+          sx={{ mb: 3, p: 2.25, borderRadius: `${radius.tile}px`, background: c.errorContainer }}
+        >
+          <Icon name="lock" size={22} color={c.errorInk} />
+          <Box>
+            <Typography sx={{ fontSize: 15, fontWeight: 600, color: c.onErrorContainer, mb: 0.25 }}>
+              Could not publish
+            </Typography>
+            <Typography sx={{ fontSize: 13, lineHeight: 1.5, color: c.errorBody }}>
+              Publishing writes a new schema version to shared organization state, so it needs the{' '}
+              <Box component="code" sx={{ fontFamily: mono }}>form.manage</Box> permission — a demo viewer
+              does not have it. Your edits are still here; nothing was lost.
+            </Typography>
+          </Box>
+        </Stack>
+      )}
+
+      {publish.isSuccess && (
+        <Stack
+          direction="row"
+          gap={1.75}
+          alignItems="center"
+          sx={{ mb: 3, p: 2.25, borderRadius: `${radius.tile}px`, background: c.success }}
+        >
+          <Icon name="check_circle" size={22} fill color={c.successInk} />
+          <Typography sx={{ fontSize: 14, color: c.onSuccess }}>
+            Published as v{schema.version + 1}. The previous version is untouched — existing entries still
+            validate against the version they were made with.
+          </Typography>
+        </Stack>
+      )}
 
       {mode === 'preview' ? (
         <Box sx={{ maxWidth: 680, mx: 'auto' }}>

@@ -18,7 +18,7 @@ Nothing in Phase 1 starts until these land, because everything depends on them.
 | 0.5 | Typed data layer | Converters + typed refs for every path in DATA_MODEL.md |
 | 0.6 | Rules skeleton + isolation tests | The 8 tests in SPEC_RBAC §7 pass against the emulator |
 | 0.7 | CI | typecheck + lint + unit + rules tests on every push |
-| 0.8 | Design system seed | Button, Input, Field, Dialog, DataTable, EmptyState, Skeleton, Toast |
+| 0.8 | Design system | **Scope changed 2026-07-29 (ADR-015):** rather than hand-building primitives, the Forge design system was imported from a Claude Design project. Exit criteria are now `app/tokens.ts` + `app/theme.ts` + `shared/ui/primitives.tsx` covering every screen, which is met. Toast and Skeleton remain unbuilt. |
 
 ## Phase 1 — MVP
 

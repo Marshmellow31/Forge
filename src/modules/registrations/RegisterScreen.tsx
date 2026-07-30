@@ -2,35 +2,57 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   Accordion, AccordionDetails, AccordionSummary, Box, Button, Dialog, DialogActions,
-  DialogContent, Stack, Typography,
+  DialogContent, Stack, Typography, CircularProgress,
 } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
-import { getChallengeBySlug, formSchemas } from '@mock/data';
-import { FormRenderer, useFormEngine } from '@modules/forms/FormRenderer';
+import { useChallengeBySlug, useFormSchemas } from '@core/firebase/hooks';
+import { useSubmitRegistration } from '@core/firebase/mutations';
+import { useAuth } from '@core/auth';
+import { NotSignedInError } from '@core/sync';
+import { FormRenderer, useFormEngine } from '@shared/ui/forms/FormRenderer';
 import { stripHiddenAnswers } from '@core/forms/conditions';
-import { EmptyState, Tag } from '@shared/ui/primitives';
-import { c, radius, mono } from '@app/tokens';
+import { EmptyState, Tag, ListSkeleton } from '@shared/ui/primitives';
+import { c, radius, mono } from '@shared/design/tokens';
 
 /** S-54 — Registration form, rendered entirely from a stored schema. */
 export default function RegisterScreen() {
   const { slug } = useParams();
-  const challenge = getChallengeBySlug(slug ?? '');
-  const schema = challenge ? formSchemas[challenge.formSchemaId] : undefined;
+  const { data: challenge, isLoading } = useChallengeBySlug(slug);
+  const { data: schemas = {} } = useFormSchemas();
+  const schema = challenge ? schemas[challenge.formSchemaId] : undefined;
   const [done, setDone] = useState(false);
+  const { user } = useAuth();
+  const submitMutation = useSubmitRegistration(challenge?.id);
 
   // Hooks must run unconditionally — fall back to an empty schema when missing.
   const engine = useFormEngine(
     schema ?? { id: '', orgId: '', version: 0, status: 'draft', title: '', description: null, sections: [], settings: { allowDrafts: false, showProgressBar: false, confirmationMessage: null } },
   );
 
+  if (isLoading) return <ListSkeleton rows={3} height={90} />;
   if (!challenge || !schema) return <EmptyState icon="search_off" title="Form not found" />;
 
   const stored = stripHiddenAnswers(schema, engine.answers);
 
   const submit = () => {
     engine.setShowErrors(true);
-    if (engine.isValid) setDone(true);
+    if (!engine.isValid) return;
+    submitMutation.mutate(
+      {
+        userId: user?.uid,
+        displayName: user?.displayName ?? 'Demo participant',
+        email: user?.email ?? 'demo@forge.app',
+        formSchemaId: schema.id,
+        formSchemaVersion: schema.version,
+        // Hidden answers are dropped before storage — no ghost data.
+        answers: stored,
+      },
+      { onSuccess: () => setDone(true) },
+    );
   };
+
+  const error = submitMutation.error;
+  const needsSignIn = error instanceof NotSignedInError;
 
   return (
     <Box sx={{ maxWidth: 680, mx: 'auto' }}>
@@ -69,6 +91,29 @@ export default function RegisterScreen() {
 
       <FormRenderer schema={schema} engine={engine} />
 
+      {error && (
+        <Stack
+          direction="row"
+          gap={1.75}
+          alignItems="flex-start"
+          sx={{ mt: 4, p: 2.25, borderRadius: `${radius.tile}px`, background: c.errorContainer }}
+        >
+          <Icon name={needsSignIn ? 'lock' : 'error'} size={22} color={c.errorInk} />
+          <Box>
+            <Typography sx={{ fontSize: 15, fontWeight: 600, color: c.onErrorContainer, mb: 0.25 }}>
+              {needsSignIn ? 'Sign in to submit' : 'Could not save your entry'}
+            </Typography>
+            <Typography sx={{ fontSize: 13, lineHeight: 1.5, color: c.errorBody }}>
+              {needsSignIn
+                ? 'The demo is read-only until you sign in. Nothing you typed has been lost.'
+                : error instanceof Error
+                  ? error.message
+                  : String(error)}
+            </Typography>
+          </Box>
+        </Stack>
+      )}
+
       <Stack direction="row" gap={1.5} alignItems="center" sx={{ mt: 4, pb: 3 }}>
         <Button variant="outlined" sx={{ height: 52, borderRadius: '26px' }}>Save draft</Button>
         <Box sx={{ flex: 1 }} />
@@ -76,9 +121,14 @@ export default function RegisterScreen() {
           variant="contained"
           sx={{ height: 52, px: 3.75, borderRadius: '26px' }}
           onClick={submit}
-          endIcon={<Icon name="arrow_forward" size={20} />}
+          disabled={submitMutation.isPending}
+          endIcon={
+            submitMutation.isPending
+              ? <CircularProgress size={18} sx={{ color: 'inherit' }} />
+              : <Icon name="arrow_forward" size={20} />
+          }
         >
-          Submit entry
+          {submitMutation.isPending ? 'Submitting…' : 'Submit entry'}
         </Button>
       </Stack>
 

@@ -2,19 +2,24 @@ import { useMemo, useState } from 'react';
 import { Box, Button, Stack, useMediaQuery } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { Icon } from '@shared/ui/Icon';
-import { challenges } from '@mock/data';
-import { ChallengeCard } from '@modules/challenges/components';
+import { useChallenges } from '@core/firebase/hooks';
+import { QueryBoundary } from '@shared/ui/QueryBoundary';
+import { ChallengeCard } from '@shared/ui/ChallengeCard';
 import { PageTitle, EmptyState } from '@shared/ui/primitives';
-import { c, radius, ease } from '@app/tokens';
-
-const CATEGORIES = ['All', ...new Set(challenges.map((ch) => ch.category))];
+import { c, radius, ease } from '@shared/design/tokens';
 
 /** S-03 — Discover. Filter chips are the design's primary control. */
 export default function Discover() {
+  const { data: challenges = [], isLoading, error } = useChallenges();
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('All');
   const theme = useTheme();
   const isMobile = !useMediaQuery(theme.breakpoints.up('md'));
+
+  const CATEGORIES = useMemo(
+    () => ['All', ...new Set(challenges.map((ch) => ch.category))],
+    [challenges],
+  );
 
   const results = useMemo(
     () =>
@@ -25,7 +30,7 @@ export default function Discover() {
           return false;
         return true;
       }),
-    [q, cat],
+    [q, cat, challenges],
   );
 
   const clear = () => {
@@ -91,6 +96,7 @@ export default function Discover() {
         })}
       </Stack>
 
+      <QueryBoundary isLoading={isLoading} error={error} skeletonHeight={260} skeletonRows={2}>
       {results.length === 0 ? (
         <EmptyState
           icon="travel_explore"
@@ -105,6 +111,7 @@ export default function Discover() {
           ))}
         </Box>
       )}
+      </QueryBoundary>
     </>
   );
 }

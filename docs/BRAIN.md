@@ -4,6 +4,11 @@
 > identity changes. Volatile state lives in [STATUS.md](STATUS.md).
 > If an implementation detail contradicts this file, the implementation is wrong.
 
+> ⚠️ **Naming is unresolved.** This file says *ChallengeOS*; the running app, its
+> `<title>`, the repo directory and the imported design system all say *Forge*.
+> Nothing here has been renamed — see [STATUS.md](STATUS.md) Q8. Everything below
+> is about the product, not the wordmark, and stands under either name.
+
 ---
 
 ## 1. The one-sentence product

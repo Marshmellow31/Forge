@@ -124,15 +124,35 @@ Mutations: always `onMutate` (optimistic) + `onError` (rollback) +
 
 ## 7. Styling
 
-* Tailwind for layout, spacing, and one-off styling.
-* MUI for complex interactive primitives (DataGrid, DatePicker, Autocomplete,
-  Menu). Do not use MUI's `Box`/`Stack` for layout — that is Tailwind's job.
-* Org branding via CSS custom properties set on `<html>` at runtime:
-  `--color-primary`, `--color-accent`. Tailwind config references them so
-  `bg-primary` follows the tenant.
-* No inline `style` except for genuinely dynamic values (progress width,
-  certificate placeholder position).
-* Dark mode: `class` strategy, both themes styled from day one.
+Rewritten 2026-07-29 when the Forge design system landed (ADR-015). The previous
+"Tailwind owns layout, never use MUI `Box`/`Stack`" rule did not survive contact
+with a design specified entirely in inline styles; what follows is what the code
+actually does.
+
+* **`shared/design/tokens.ts` is the only place a hex may be written.** Colour, radius,
+  elevation, motion easing and the cover/status maps live there. A component that
+  needs a new colour adds a token; it does not inline one.
+* **`app/theme.ts` derives the MUI theme from `shared/design/tokens.ts` and nothing else.**
+  Anything expressible as a theme default (button height, field fill, tab
+  indicator) belongs there, not repeated per call site.
+* **MUI `Box`/`Stack` + `sx` own layout.** `sx` compiles to real classes, so it
+  is not the "inline style" the old rule warned about. Tailwind utilities remain
+  available and are fine for simple grid/flex/spacing, but do not split one
+  component's layout across both systems — pick one per component.
+* **Icons are Material Symbols Rounded via `shared/ui/Icon.tsx`.** Do not import
+  `@mui/icons-material`; the font is loaded in `index.html` and `Icon`'s `fill`
+  prop selects the filled variant.
+* Reach for a primitive in `shared/ui/primitives.tsx` before writing a new
+  card/panel/pill. If none fits, add one there rather than styling in place.
+* Real inline `style` stays reserved for genuinely dynamic values (progress
+  width, certificate placeholder position).
+* **Dark mode is not implemented.** The design ships light-only and the theme is
+  `mode: 'light'`. Doing it later means adding a second token set — which is why
+  every colour goes through `tokens.ts`. Do not hand-roll a dark variant in a
+  component.
+* Org branding still resolves to CSS custom properties at runtime; `index.css`
+  mirrors a small subset of the tokens for the rules that cannot read TS, and the
+  two must be kept in step.
 
 ## 8. Errors
 

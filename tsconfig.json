@@ -23,7 +23,8 @@
       "@modules/*": ["src/modules/*"],
       "@core/*": ["src/core/*"],
       "@shared/*": ["src/shared/*"],
-      "@mock/*": ["src/mock/*"]
+      "@mock/*": ["src/mock/*"],
+      "@config/*": ["src/config/*"]
     }
   },
   "include": ["src", "vite.config.ts"]

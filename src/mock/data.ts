@@ -4,121 +4,18 @@
  * matter of replacing this module, not rewriting screens.
  */
 import type { FormSchema } from '@core/forms/types';
+import type {
+  Org, Workspace, ChallengeStatus, Stage, Challenge, Registration, Submission,
+  LeaderboardEntry, Criterion, Member, CurrentUser,
+} from '@shared/types/domain';
 
-export interface Org {
-  id: string;
-  name: string;
-  slug: string;
-  type: string;
-  logoColor: string;
-  initials: string;
-  memberCount: number;
-  challengeCount: number;
-  plan: 'free' | 'pro' | 'enterprise';
-}
-
-export interface Workspace {
-  id: string;
-  orgId: string;
-  name: string;
-  icon: string;
-  challengeCount: number;
-}
-
-export type ChallengeStatus = 'draft' | 'published' | 'running' | 'judging' | 'completed';
-
-export interface Stage {
-  key: string;
-  name: string;
-  type: string;
-  state: 'done' | 'active' | 'locked';
-}
-
-export interface Challenge {
-  id: string;
-  orgId: string;
-  workspaceId: string;
-  title: string;
-  slug: string;
-  description: string;
-  category: string;
-  tags: string[];
-  status: ChallengeStatus;
-  visibility: 'public' | 'organization' | 'invite';
-  cover: string;
-  formSchemaId: string;
-  stages: Stage[];
-  timeline: { registrationClosesAt: string; submissionClosesAt: string; resultsAt: string };
-  counters: { registrations: number; submissions: number; reviewsCompleted: number; reviewsPending: number };
-  leaderboardMode: 'hidden' | 'live' | 'afterClose' | 'public';
-  prize: string;
-}
-
-export interface Registration {
-  id: string;
-  challengeId: string;
-  userId: string;
-  name: string;
-  email: string;
-  avatarColor: string;
-  status: 'pending' | 'active' | 'eliminated' | 'winner';
-  currentStageKey: string;
-  registeredAt: string;
-  checkedIn: boolean;
-  answers: Record<string, unknown>;
-}
-
-export interface Submission {
-  id: string;
-  challengeId: string;
-  registrationId: string;
-  participant: string;
-  anonymizedLabel: string;
-  stageKey: string;
-  status: 'draft' | 'submitted' | 'underReview' | 'reviewed';
-  submittedAt: string;
-  isLate: boolean;
-  clientSubmittedAt?: string;
-  serverReceivedAt?: string;
-  fileCount: number;
-  reviewsDone: number;
-  reviewsTotal: number;
-  score: number | null;
-  isProvisional: boolean;
-  variance: number;
-  answers: Record<string, unknown>;
-}
-
-export interface LeaderboardEntry {
-  rank: number;
-  registrationId: string;
-  name: string;
-  avatarColor: string;
-  score: number;
-  change: number;
-  isProvisional: boolean;
-  reviewsDone: number;
-  reviewsTotal: number;
-}
-
-export interface Criterion {
-  id: string;
-  name: string;
-  description: string;
-  weight: number;
-  max: number;
-}
-
-export interface Member {
-  id: string;
-  name: string;
-  email: string;
-  avatarColor: string;
-  roles: string[];
-  status: 'active' | 'invited' | 'suspended';
-  joinedAt: string;
-}
-
+// The domain types now live in @shared/types/domain so this fixture and the
+// Firestore mappers provably produce the same shapes. Re-exported for the
+// screens that still import them from here.
+export type {
+  Org, Workspace, ChallengeStatus, Stage, Challenge, Registration, Submission,
+  LeaderboardEntry, Criterion, Member, CurrentUser, FormSchema,
+};
 /* ------------------------------------------------------------------ */
 
 export const currentUser = {

@@ -3,14 +3,17 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Alert, Box, Button, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import {
-  getChallenge, getWorkspace, registrations, submissions, leaderboard, rubric, formSchemas,
-} from '@mock/data';
-import { StageStepper } from './components';
+  useChallenge, useWorkspaces, useRegistrations, useSubmissions, useLeaderboard,
+  useRubric, useFormSchemas, useChallengeSnapshot,
+} from '@core/firebase/hooks';
+import { ListSkeleton } from '@shared/ui/primitives';
+import { ExportMenu } from '@shared/ui/ExportMenu';
+import { StageStepper } from '@shared/ui/StageStepper';
 import {
   StatTile, EmptyState, PersonCell, ScoreCell, StatusPill, SectionLabel, TableHead,
   tableRowSx, Num, Tag, ProgressBar,
 } from '@shared/ui/primitives';
-import { c, radius, mono } from '@app/tokens';
+import { c, radius, mono } from '@shared/design/tokens';
 
 const TABS = ['Overview', 'Registrations', 'Submissions', 'Judging', 'Leaderboard'];
 
@@ -18,14 +21,21 @@ const TABS = ['Overview', 'Registrations', 'Submissions', 'Judging', 'Leaderboar
 export default function ChallengeControlRoom() {
   const { cid } = useParams();
   const navigate = useNavigate();
-  const ch = getChallenge(cid ?? '');
   const [tab, setTab] = useState(0);
+  // One pre-joined read fills registrations/submissions/rubric/leaderboard.
+  const { isLoading: snapLoading } = useChallengeSnapshot(cid);
+  const { data: ch, isLoading } = useChallenge(cid);
+  const { data: workspaces = [] } = useWorkspaces();
+  const { data: schemas = {} } = useFormSchemas();
+  const { data: regs = [] } = useRegistrations(cid);
+  const { data: subs = [] } = useSubmissions(cid);
+  const { data: rubric = [] } = useRubric(cid);
+  const { data: leaderboard = [] } = useLeaderboard(cid);
 
+  if (isLoading || snapLoading) return <ListSkeleton rows={3} height={140} />;
   if (!ch) return <EmptyState icon="warning" title="Challenge not found" />;
 
-  const schema = formSchemas[ch.formSchemaId]!;
-  const regs = registrations.filter((r) => r.challengeId === ch.id);
-  const subs = submissions.filter((s) => s.challengeId === ch.id);
+  const schema = schemas[ch.formSchemaId];
   const lateOffline = subs.filter((s) => s.clientSubmittedAt);
 
   return (
@@ -46,16 +56,44 @@ export default function ChallengeControlRoom() {
             <StatusPill status={ch.status} />
           </Stack>
           <Typography sx={{ fontSize: 14, color: c.inkMuted }}>
-            {getWorkspace(ch.workspaceId)?.name} · form {schema.id} v{schema.version} ·{' '}
+            {workspaces.find((w) => w.id === ch.workspaceId)?.name} · form {schema?.id ?? '—'} v{schema?.version ?? '?'} ·{' '}
             {ch.counters.submissions} of {ch.counters.registrations} submitted
           </Typography>
         </Box>
         <Stack direction="row" gap={1.25} flexWrap="wrap">
+          <Button
+            variant="outlined"
+            component={Link}
+            to={`/org/challenges/${ch.id}/edit`}
+            startIcon={<Icon name="edit" size={20} />}
+          >
+            Edit challenge
+          </Button>
           <Button variant="outlined" component={Link} to={`/org/challenges/${ch.id}/form`} startIcon={<Icon name="dynamic_form" size={20} />}>
             Form builder
           </Button>
           <Button variant="outlined" component={Link} to={`/c/${ch.slug}`}>Public page</Button>
-          <Button sx={{ background: c.inverse, color: c.onInverse, '&:hover': { background: c.inverse } }}>
+          <ExportMenu
+            challengeSlug={ch.slug}
+            schema={schema}
+            blind={ch.blindJudging ?? false}
+            registrations={regs.map((r) => ({
+              id: r.id, name: r.name, email: r.email, status: r.status,
+              registeredAt: r.registeredAt, checkedIn: r.checkedIn, answers: r.answers,
+            }))}
+            submissions={subs.map((s) => ({
+              id: s.id, participant: s.participant, anonymizedLabel: s.anonymizedLabel,
+              stageKey: s.stageKey, status: s.status, submittedAt: s.submittedAt,
+              isLate: s.isLate, fileCount: s.fileCount, reviewsDone: s.reviewsDone,
+              reviewsTotal: s.reviewsTotal, score: s.score, isProvisional: s.isProvisional,
+            }))}
+          />
+          <Button
+            component={Link}
+            to={`/org/challenges/${ch.id}/publish`}
+            startIcon={<Icon name="campaign" size={20} />}
+            sx={{ background: c.inverse, color: c.onInverse, '&:hover': { background: c.inverse } }}
+          >
             Publish results
           </Button>
         </Stack>

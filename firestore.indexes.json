@@ -1,0 +1,99 @@
+{
+  "$comment": "Composite indexes per DATA_MODEL.md §5. Every composite query gets an entry here in the same commit that introduces it (CONVENTIONS.md §5).",
+  "indexes": [
+    {
+      "$comment": "closing soon",
+      "collectionGroup": "challenges",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "timeline.registrationClosesAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "$comment": "workspace board",
+      "collectionGroup": "challenges",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "$comment": "stage cohorts",
+      "collectionGroup": "registrations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "currentStageKey", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "$comment": "my registrations, within one challenge",
+      "collectionGroup": "registrations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "$comment": "my registrations ACROSS challenges — ADR-018. Must be COLLECTION_GROUP: the COLLECTION-scoped index above does not serve a collectionGroup() query, and the query fails at runtime without this.",
+      "collectionGroup": "registrations",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "$comment": "judge queue (FIFO)",
+      "collectionGroup": "submissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "stageKey", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "$comment": "a judge's pending work",
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "judgeId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "$comment": "discovery",
+      "collectionGroup": "publicChallenges",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "category", "order": "ASCENDING" },
+        { "fieldPath": "timeline.registrationClosesAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "$comment": "audit trail",
+      "collectionGroup": "auditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "actorId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "$comment": "ADR-018. Firestore creates single-field indexes automatically, but only at COLLECTION scope. A collectionGroup() query filtering on one field needs the field explicitly indexed at COLLECTION_GROUP scope, which is what this override adds.",
+      "collectionGroup": "registrations",
+      "fieldPath": "userId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    }
+  ]
+}

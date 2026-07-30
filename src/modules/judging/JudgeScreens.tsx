@@ -4,16 +4,45 @@ import {
   Box, Button, Dialog, DialogActions, DialogContent, Slider, Stack, TextField, Typography,
 } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
-import { submissions, rubric } from '@mock/data';
-import { PageTitle, EmptyState, StatTile, Num, Tag, liftSx } from '@shared/ui/primitives';
-import { c, radius, coverFor, mono } from '@app/tokens';
+import { useChallenges, useSubmissions, useRubric, useChallengeSnapshot } from '@core/firebase/hooks';
+import { useSubmitReview } from '@core/firebase/mutations';
+import { useAuth } from '@core/auth';
+import { NotSignedInError } from '@core/sync';
+import { QueryBoundary } from '@shared/ui/QueryBoundary';
+import { PageTitle, EmptyState, StatTile, Num, Tag, liftSx, ListSkeleton } from '@shared/ui/primitives';
+import { c, radius, coverFor, mono } from '@shared/design/tokens';
 
-const queue = submissions.filter((s) => s.reviewsDone < s.reviewsTotal);
+/**
+ * The judged challenge for this demo: the first one actually in judging.
+ * A real judge queue is driven by assignment (reviews where judgeId == me),
+ * which needs the assignment pipeline — see STATUS.md.
+ */
+function useJudgeQueue() {
+  const { data: challenges = [] } = useChallenges();
+  const target = challenges.find((ch) => ch.status === 'judging') ?? challenges[0];
+  useChallengeSnapshot(target?.id);
+  const { data: submissions = [], isLoading, error } = useSubmissions(target?.id);
+  const { data: rubric = [] } = useRubric(target?.id);
+  const queue = submissions.filter((s) => s.reviewsDone < s.reviewsTotal);
+  // Blind mode is a per-challenge setting, not an assumption. It used to be
+  // hardcoded here, which meant a challenge that had not chosen it still told
+  // judges names were hidden — while showing them.
+  return {
+    submissions, queue, rubric, isLoading, error,
+    challengeId: target?.id,
+    blind: target?.blindJudging ?? false,
+  };
+}
+
+/** What a judge is allowed to see for this submission. */
+const labelFor = (s: { participant: string; anonymizedLabel: string }, blind: boolean) =>
+  blind ? s.anonymizedLabel : s.participant;
 
 /** S-46 — Judging queue. */
 export function JudgeQueue() {
+  const { submissions, queue, isLoading, error, blind } = useJudgeQueue();
   const done = submissions.length - queue.length;
-  const pct = Math.round((done / submissions.length) * 100);
+  const pct = submissions.length ? Math.round((done / submissions.length) * 100) : 0;
   const navigate = useNavigate();
   const next = queue[0];
 
@@ -22,10 +51,13 @@ export function JudgeQueue() {
       <Stack direction="row" alignItems="flex-end" justifyContent="space-between" flexWrap="wrap" gap={2}>
         <PageTitle>Judging queue</PageTitle>
         <Typography sx={{ fontSize: 14, color: c.inkMuted, mb: 3 }}>
-          Blind judging is on — names are hidden.
+          {blind
+            ? 'Blind judging is on — entrant names are hidden.'
+            : 'Entrant names are visible on this challenge.'}
         </Typography>
       </Stack>
 
+      <QueryBoundary isLoading={isLoading} error={error}>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 2, mb: 3 }}>
         <StatTile label="Assigned" value={submissions.length} />
         <StatTile label="Remaining" value={queue.length} tone="primary" />
@@ -93,7 +125,7 @@ export function JudgeQueue() {
                   component="span"
                   sx={{ position: 'absolute', top: 12, left: 12, fontFamily: mono, fontSize: 11, background: 'rgba(255,253,246,.86)', px: 1, py: 0.5, borderRadius: '8px' }}
                 >
-                  {s.anonymizedLabel}
+                  {labelFor(s, blind)}
                 </Box>
               </Box>
               <Box sx={{ p: '16px 18px 18px' }}>
@@ -111,6 +143,7 @@ export function JudgeQueue() {
           ))}
         </Box>
       )}
+      </QueryBoundary>
     </>
   );
 }
@@ -119,6 +152,9 @@ export function JudgeQueue() {
 export function ScoringScreen() {
   const { sid } = useParams();
   const nav = useNavigate();
+  const { queue, rubric, isLoading, challengeId, blind } = useJudgeQueue();
+  const { user } = useAuth();
+  const reviewMutation = useSubmitReview(challengeId);
   const idx = queue.findIndex((s) => s.id === sid);
   const sub = queue[idx];
   const [scores, setScores] = useState<Record<string, number>>({});
@@ -126,10 +162,39 @@ export function ScoringScreen() {
   const [recuse, setRecuse] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  if (isLoading) return <ListSkeleton rows={2} height={220} />;
   if (!sub) return <EmptyState icon="search_off" title="Submission not found" />;
 
   const weighted = rubric.reduce((sum, r) => sum + ((scores[r.id] ?? 0) / r.max) * r.weight * 100, 0);
   const complete = rubric.every((r) => scores[r.id] !== undefined);
+
+  const send = (recused: boolean) =>
+    reviewMutation.mutate(
+      {
+        submissionId: sub.id,
+        judgeId: user?.uid,
+        stageKey: sub.stageKey,
+        criteriaScores: rubric.map((r) => ({
+          criterionId: r.id,
+          score: scores[r.id] ?? 0,
+          comment: null,
+        })),
+        totalRaw: rubric.reduce((n, r) => n + (scores[r.id] ?? 0), 0),
+        totalWeighted: weighted,
+        comment: comment || null,
+        recused,
+      },
+      {
+        onSuccess: () => {
+          setRecuse(false);
+          if (recused) nav('/judge');
+          else setSubmitted(true);
+        },
+      },
+    );
+
+  const reviewError = reviewMutation.error;
+  const needsSignIn = reviewError instanceof NotSignedInError;
 
   return (
     <>
@@ -143,9 +208,11 @@ export function ScoringScreen() {
           <Icon name="close" size={22} />
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography sx={{ fontSize: 12, color: c.inkFaint }}>Blind review</Typography>
-          <Typography sx={{ fontSize: 18, fontWeight: 700, letterSpacing: '-.01em' }}>
-            {sub.anonymizedLabel}
+          <Typography sx={{ fontSize: 12, color: c.inkFaint }}>
+            {blind ? 'Blind review' : 'Review'}
+          </Typography>
+          <Typography noWrap sx={{ fontSize: 18, fontWeight: 700, letterSpacing: '-.01em' }}>
+            {labelFor(sub, blind)}
           </Typography>
         </Box>
         <Box sx={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: c.inkMuted }}>
@@ -158,12 +225,12 @@ export function ScoringScreen() {
           <Box sx={{ height: { xs: 240, md: 340 }, background: `linear-gradient(140deg,${c.success},${c.primary})`, display: 'grid', placeItems: 'center' }}>
             <Box sx={{ textAlign: 'center', fontFamily: mono, fontSize: 12, color: c.onPrimary }}>
               <Icon name="image" size={40} style={{ display: 'block', marginBottom: 8 }} />
-              filename hidden — blind mode
+              {blind ? 'filename hidden — blind mode' : 'submitted entry'}
             </Box>
           </Box>
           <Box sx={{ p: '22px 24px' }}>
             <Box sx={{ fontFamily: mono, fontSize: 12, color: c.inkFaint, mb: 1 }}>
-              {sub.anonymizedLabel} · shot on {String(sub.answers.shot_on ?? '—')}
+              {labelFor(sub, blind)} · shot on {String(sub.answers.shot_on ?? '—')}
             </Box>
             <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: '-.02em', mb: 1.25 }}>
               {String(sub.answers.title ?? 'Untitled')}
@@ -172,8 +239,9 @@ export function ScoringScreen() {
               {String(sub.answers.statement ?? '—')}
             </Typography>
             <Box sx={{ p: 2, borderRadius: `${radius.field}px`, background: c.surfaceContainer, fontSize: 13, lineHeight: 1.55, color: c.inkMuted }}>
-              Name, email and department are withheld — those fields are marked PII and this challenge has blind
-              judging enabled.
+              {blind
+                ? 'Name, email and any field marked as personal are withheld, because this challenge has blind judging on. Exports are anonymized too.'
+                : 'This challenge does not use blind judging, so entrant details are visible. An organizer can turn it on in the challenge settings — before judging starts.'}
             </Box>
           </Box>
         </Box>
@@ -233,6 +301,29 @@ export function ScoringScreen() {
             sx={{ mb: 2.5 }}
           />
 
+          {reviewError && (
+            <Stack
+              direction="row"
+              gap={1.5}
+              alignItems="flex-start"
+              sx={{ mb: 2.5, p: 2, borderRadius: `${radius.field}px`, background: c.errorContainer }}
+            >
+              <Icon name={needsSignIn ? 'lock' : 'error'} size={20} color={c.errorInk} />
+              <Box>
+                <Box sx={{ fontSize: 14, fontWeight: 600, color: c.onErrorContainer, mb: 0.25 }}>
+                  {needsSignIn ? 'Sign in to score' : 'Could not save this review'}
+                </Box>
+                <Box sx={{ fontSize: 13, lineHeight: 1.5, color: c.errorBody }}>
+                  {needsSignIn
+                    ? 'Judging writes to the append-only score ledger, so it needs an identity. Your scores are still here.'
+                    : reviewError instanceof Error
+                      ? reviewError.message
+                      : String(reviewError)}
+                </Box>
+              </Box>
+            </Stack>
+          )}
+
           {!complete && (
             <Box sx={{ mb: 2.5, p: 2, borderRadius: `${radius.field}px`, background: c.errorContainer, color: c.errorBody, fontSize: 13, lineHeight: 1.5 }}>
               Score every criterion before submitting. A skipped criterion is never treated as zero.
@@ -246,10 +337,10 @@ export function ScoringScreen() {
             <Button
               variant="contained"
               sx={{ flex: 1, height: 52, borderRadius: '26px' }}
-              disabled={!complete}
-              onClick={() => setSubmitted(true)}
+              disabled={!complete || reviewMutation.isPending}
+              onClick={() => send(false)}
             >
-              Submit review
+              {reviewMutation.isPending ? 'Saving…' : 'Submit review'}
             </Button>
           </Stack>
         </Box>
@@ -268,7 +359,7 @@ export function ScoringScreen() {
         </DialogContent>
         <DialogActions sx={{ px: 3.5, pb: 3 }}>
           <Button variant="text" onClick={() => setRecuse(false)}>Cancel</Button>
-          <Button variant="contained" onClick={() => { setRecuse(false); nav('/judge'); }}>Recuse</Button>
+          <Button variant="contained" disabled={reviewMutation.isPending} onClick={() => send(true)}>Recuse</Button>
         </DialogActions>
       </Dialog>
 
@@ -288,7 +379,7 @@ export function ScoringScreen() {
           <Stack direction="row" justifyContent="center" gap={1}>
             <Tag>{`${weighted.toFixed(1)} weighted`}</Tag>
             <Tag bg={c.surfaceContainer} fg={c.inkMuted}>
-              <Num size={11}>{sub.anonymizedLabel}</Num>
+              <Num size={11}>{labelFor(sub, blind)}</Num>
             </Tag>
           </Stack>
         </DialogContent>

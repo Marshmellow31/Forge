@@ -1,0 +1,22 @@
+{
+  "name": "forge-functions",
+  "private": true,
+  "description": "Cloud Functions for Forge. NOT DEPLOYED — requires the Blaze plan.",
+  "$comment": "`main` points into lib/functions/ because tsconfig's rootDir reaches up to the repo root, so the app's pure judging engine compiles in alongside these functions rather than being duplicated.",
+  "main": "lib/functions/src/index.js",
+  "engines": { "node": "22" },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "$comment_verify": "Emulator verification lives in the ROOT package.json as `npm run test:functions`, because that is where firebase.json and the firebase-tools binary are.",
+    "deploy": "npm run build && firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
