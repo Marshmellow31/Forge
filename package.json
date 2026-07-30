@@ -33,7 +33,10 @@
     "react-router-dom": "^6.28.0",
     "zod": "^3.23.8"
   },
+  "$comment_emnapi": "@emnapi/core and @emnapi/runtime below are used by NONE of our code. @napi-rs/wasm-runtime@1.2.0 — bundled inside the wasm32-wasi fallback binaries of tailwind-oxide and the eslint resolver — peers on @emnapi/core@^2.0.0-alpha.3, and npm will not auto-install a PRERELEASE peer. So they never landed in package-lock.json, and `npm ci` on a clean Linux runner rejected the whole tree as out of sync ('Missing: @emnapi/core@2.0.0-alpha.3 from lock file') before running a single test. Declaring them forces them into the lock on every platform. Drop them once @napi-rs/wasm-runtime ships a stable 2.x peer range.",
   "devDependencies": {
+    "@emnapi/core": "2.0.0-alpha.3",
+    "@emnapi/runtime": "2.0.0-alpha.3",
     "@eslint/js": "^9.39.5",
     "@firebase/rules-unit-testing": "^5.0.1",
     "@tailwindcss/vite": "^4.0.0",
