@@ -338,9 +338,20 @@ It is no longer unverified. The Spark plan blocks *deploying* Cloud Functions;
 it does not block the **emulator**, which has no plan restriction. So
 `npm run test:functions` starts the Firestore and Functions emulators, writes
 real documents, and asserts what each trigger actually wrote
-(`functions/verify.mjs`, 9 assertions). All three Firestore triggers fire and
-pass. This runs in CI as a third job (`Cloud Functions (emulator)`), so they
-cannot rot while waiting for billing.
+(`functions/verify.mjs`, **22 assertions covering all four functions**). This
+runs in CI as a third job (`Cloud Functions (emulator)`), so they cannot rot
+while waiting for billing.
+
+**`dispatchWebhook` is proven too**, which was the last thing assumed
+untestable. The emulator runs on the local machine, so the suite stands up a real
+HTTP receiver on `127.0.0.1`, dispatches to it, and **recomputes the HMAC from
+the secret in Firestore** — asserting the thing that actually matters: a receiver
+holding the shared secret can verify what Forge sends. Also asserted: an
+unauthenticated call is refused (401); a member *with* an org membership but
+*without* `integration.manage` is refused and delivers nothing; inactive hooks
+and hooks for other events do not fire; the signature covers a timestamp so a
+captured request cannot be replayed; and a dead receiver records its failure
+without failing the call that triggered it.
 
 Two real defects only came out once the code executed:
 
@@ -353,9 +364,10 @@ Two real defects only came out once the code executed:
   the file's own header table with no function under it. Row removed; ADR-022
   stays open rather than looking closed.
 
-What the emulator still cannot prove: IAM, region placement, cold-start limits,
-and **outbound network egress** — which Spark blocks and `dispatchWebhook`
-needs. So webhook *delivery* remains the one Phase 3 item with no local proof.
+What the emulator still cannot prove is nothing about this code — it is the
+hosting facts: IAM, region placement, cold-start limits, and egress to the
+*public* internet, which Spark blocks. That is a billing condition, not an
+unverified line. Every branch of `functions/` now has a passing assertion.
 
 `firebase.json` now carries a `functions` block (the emulator needs it to load
 them). That means a bare `firebase deploy` would try to deploy functions and fail

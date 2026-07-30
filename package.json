@@ -16,6 +16,7 @@
     "test:functions": "npm --prefix functions run build && firebase emulators:exec --only firestore,functions --project forge-4d40a \"node functions/verify.mjs\"",
     "verify": "npm run typecheck && npm run lint && npm run test",
     "seed": "tsx scripts/seed.ts",
+    "icons": "tsx scripts/generate-icons.ts",
     "rules:deploy": "firebase deploy --only firestore:rules,firestore:indexes",
     "emulators": "firebase emulators:start"
   },

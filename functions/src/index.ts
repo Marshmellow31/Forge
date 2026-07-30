@@ -10,10 +10,11 @@
  * The emulator, however, has no plan restriction, and that is where these are
  * verified: `npm run test:functions` starts the Firestore and
  * Functions emulators, writes real documents, and asserts what each trigger
- * wrote (see `../verify.mjs`). Every trigger below fires and passes there, so
+ * wrote (see `../verify.mjs` — 22 assertions across all four functions,
+ * including a real local HTTP receiver that recomputes the webhook HMAC). So
  * "compiles clean" is no longer the only evidence. What the emulator cannot
- * prove is production-only behaviour: IAM, region placement, cold-start limits,
- * and outbound network egress (which Spark blocks and `dispatchWebhook` needs).
+ * prove is hosting, not code: IAM, region placement, cold-start limits, and
+ * egress to the public internet (which Spark blocks).
  *
  * Each function here either **retires a documented trade-off** or **unblocks a
  * Phase 3 feature that cannot exist client-side**:
