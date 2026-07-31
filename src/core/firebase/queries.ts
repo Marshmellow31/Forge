@@ -18,7 +18,7 @@ import type { MemberLike, RoleDefinition } from '@core/rbac';
 import type { RegistrationDoc } from './types';
 
 /**
- * Tenant-scoped reads. Every function takes `orgId` — CLAUDE.md hard rule 2.
+ * Tenant-scoped reads. Every function takes `orgId` — AGENT.md hard rule 2.
  *
  * These are plain async functions with no React in them; the hooks in
  * `@core/firebase/hooks` wrap them for TanStack Query.
@@ -248,7 +248,7 @@ export async function fetchNotifications(orgId: string, userId: string) {
  *
  * `registrationId == userId` in individual mode, so this is a collection-group
  * query filtered by that id. The `orgId` filter keeps it tenant-scoped, which
- * CLAUDE.md hard rule 2 requires of a `collectionGroup` — see ADR-018.
+ * AGENT.md hard rule 2 requires of a `collectionGroup` — see ADR-018.
  */
 export async function fetchMyRegistrations(orgId: string, userId: string) {
   const snap = await getDocs(

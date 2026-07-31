@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Box, Button, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { OrgLogo } from '@shared/ui/OrgLogo';
@@ -35,7 +35,7 @@ const TYPES = [
 
 export default function CreateOrganization() {
   const nav = useNavigate();
-  const { user, signInGoogle, busy } = useAuth();
+  const { user } = useAuth();
   const create = useCreateOrganization();
 
   const [name, setName] = useState('');
@@ -88,8 +88,13 @@ export default function CreateOrganization() {
               An organization needs an owner, and that has to be an account rather than a browser
               session.
             </Typography>
-            <Button variant="contained" size="small" disabled={busy} onClick={() => void signInGoogle()}>
-              Sign in with Google
+            <Button
+              variant="contained"
+              size="small"
+              component={Link}
+              to="/signin?next=%2Forg%2Fnew"
+            >
+              Sign in
             </Button>
           </Box>
         </Stack>

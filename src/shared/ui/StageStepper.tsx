@@ -6,7 +6,7 @@ import type { Stage } from '@shared/types/domain';
 /**
  * `ChallengeCard` used to live here. It moved to `@shared/ui/ChallengeCard`
  * because three separate modules render it, and a module importing another
- * module is the design smell CLAUDE.md names. What is left is genuinely
+ * module is the design smell AGENT.md names. What is left is genuinely
  * challenge-specific.
  */
 

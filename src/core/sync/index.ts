@@ -1,7 +1,7 @@
 import * as writes from '@core/firebase/writes';
 
 /**
- * The mutation entry point. CLAUDE.md hard rule 10: participant-facing writes
+ * The mutation entry point. AGENT.md hard rule 10: participant-facing writes
  * go through here, never `setDoc` from a component.
  *
  * **Offline durability is delegated to the Firestore SDK**, not to a bespoke

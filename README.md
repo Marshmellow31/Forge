@@ -332,7 +332,7 @@ vite-plugin-pwa (Workbox) · Vercel.
 
 | Doc | What it answers |
 |---|---|
-| [CLAUDE.md](CLAUDE.md) | Agent router + the ten hard rules |
+| [AGENT.md](AGENT.md) | Agent router + the ten hard rules |
 | [DEPLOY.md](DEPLOY.md) | Firebase and Vercel setup, step by step |
 | [docs/STATUS.md](docs/STATUS.md) | Where we are, what's next, what's blocked |
 | [docs/BRAIN.md](docs/BRAIN.md) | Vision, domain model, vocabulary, invariants |

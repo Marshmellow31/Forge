@@ -9,7 +9,7 @@ multi-tenant SaaS platform where organizations create, run, judge and reward
 challenges (competitions, hackathons, campaigns, employee engagement, creator
 contests, assignment submissions).
 
-Read `CLAUDE.md` and `docs/BRAIN.md` §6–7 for the domain model and vocabulary.
+Read `AGENT.md` and `docs/BRAIN.md` §6–7 for the domain model and vocabulary.
 Read `docs/SPEC_RBAC.md` §2–3 only for role names. Do not read other docs.
 
 Output a single file: `docs/UI_SCREENS.md`.

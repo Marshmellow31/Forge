@@ -29,7 +29,7 @@ import { c, radius, coverFor } from '@shared/design/tokens';
  */
 export default function CommunityVote() {
   const { slug } = useParams();
-  const { user, signInGoogle, busy } = useAuth();
+  const { user } = useAuth();
   const { data: challenge, isLoading, error } = useChallengeBySlug(slug);
   useChallengeSnapshot(challenge?.id);
   const { data: submissions = [] } = useSubmissions(challenge?.id);
@@ -80,7 +80,12 @@ export default function CommunityVote() {
             Sign in to vote. One vote per account is the only thing keeping this honest, and it
             needs an account to count.
           </Typography>
-          <Button variant="contained" size="small" disabled={busy} onClick={() => void signInGoogle()}>
+          <Button
+            variant="contained"
+            size="small"
+            component={Link}
+            to={`/signin?next=${encodeURIComponent(`/c/${challenge.slug}/vote`)}`}
+          >
             Sign in
           </Button>
         </Stack>

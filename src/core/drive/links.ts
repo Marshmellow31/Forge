@@ -1,7 +1,7 @@
 /**
  * Google Drive link handling. PURE — no network, no SDK, no React.
  *
- * ADR-017. We store references, not bytes (CLAUDE.md hard rule 5), and on the
+ * ADR-017. We store references, not bytes (AGENT.md hard rule 5), and on the
  * Spark plan there is no Cloud Function to mint a resumable upload session. So
  * the integration is link-first: a person shares a Drive file and pastes the
  * link, and we derive a `FileRef` from it.

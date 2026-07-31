@@ -2,7 +2,7 @@ rules_version = '2';
 
 // Firestore Security Rules — the enforcement layer.
 //
-// CLAUDE.md hard rule 3: the client is never the authority. Every client-side
+// AGENT.md hard rule 3: the client is never the authority. Every client-side
 // permission check in the UI is UX only; this file is what actually holds.
 //
 // Structure follows DATA_MODEL.md §6. Tenant isolation is structural: tenant
@@ -237,7 +237,7 @@ service cloud.firestore {
       }
 
       // Published schemas are immutable — an edit creates version n+1.
-      // CLAUDE.md hard rule 6.
+      // AGENT.md hard rule 6.
       match /formSchemas/{schemaId} {
         allow read: if isMember(orgId) || demoReadable(orgId);
         allow create: if hasPerm(orgId, 'form.manage');

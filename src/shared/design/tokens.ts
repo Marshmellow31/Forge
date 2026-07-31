@@ -1,7 +1,7 @@
 /**
  * Design tokens — Forge, Material Design 3 (expressive) warm amber scheme.
  *
- * Imported from the Claude Design project "Material Design 3 SaaS UI"
+ * Imported from the Agent Design project "Material Design 3 SaaS UI"
  * (`Forge.dc.html`). These are the single source of truth for colour, radius,
  * elevation and motion. Do not hardcode a hex anywhere else; add a token here.
  */

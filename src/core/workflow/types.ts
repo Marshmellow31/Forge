@@ -4,7 +4,7 @@
  * The point of this file is that "Registration → Submission → Winner" and
  * "Registration → Screening → Round 1 → Round 2 → Interview → Winner" are the
  * same code path with different documents. Nothing below encodes a particular
- * competition shape; that is CLAUDE.md hard rule 1 expressed as types.
+ * competition shape; that is AGENT.md hard rule 1 expressed as types.
  */
 
 export type StageKey = string;

@@ -11,7 +11,7 @@ import type { NotificationDoc } from './types';
 /**
  * Firestore write primitives.
  *
- * Nothing calls these directly — they go through `core/sync`, per CLAUDE.md
+ * Nothing calls these directly — they go through `core/sync`, per AGENT.md
  * hard rule 10. Components never import this module.
  *
  * Every write here is **idempotent by construction**: the document id is
@@ -57,7 +57,7 @@ export async function writeRegistration(input: RegistrationInput) {
       currentStageKey: 'registration',
       formSchemaId: input.formSchemaId,
       // PINNED: this answer set is only ever valid against the version it was
-      // filled in against. CLAUDE.md hard rule 6.
+      // filled in against. AGENT.md hard rule 6.
       formSchemaVersion: input.formSchemaVersion,
       answers: input.answers,
       checkedInAt: null,
@@ -163,7 +163,7 @@ export async function writeReview(input: ReviewInput) {
 
 /**
  * Publishing edits a published schema, so it writes version n+1 as a NEW
- * document and leaves the old one untouched. CLAUDE.md hard rule 6: existing
+ * document and leaves the old one untouched. AGENT.md hard rule 6: existing
  * submissions keep pointing at the version they were made against.
  *
  * Requires `form.manage`; a demo viewer will be denied by the rules, which is

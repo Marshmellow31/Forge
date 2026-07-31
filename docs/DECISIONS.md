@@ -208,7 +208,7 @@ consistency (publishing), and scheduled work (reminders, advancement).
 
 **Context.** SPEC_FORM_ENGINE §4 originally defined `FieldTypeDefinition` with
 `ConfigEditor`, `Input` and `Display` as React components living in
-`core/forms/`. CLAUDE.md hard rule 8 says `core/` contains no React. Both cannot
+`core/forms/`. AGENT.md hard rule 8 says `core/` contains no React. Both cannot
 be true. The contradiction surfaced the moment the registry was actually built.
 
 **Decision.** Split the registry across the layer boundary:
@@ -303,7 +303,7 @@ and form-control baseline.
 ## ADR-015 — One application shell, and design tokens are the single source of colour
 **Date:** 2026-07-29 · **Status:** Accepted
 
-**Context.** The Forge design system (Claude Design project "Material Design 3
+**Context.** The Forge design system (Agent Design project "Material Design 3
 SaaS UI", `Forge.dc.html`) was imported and implemented. It specifies a single
 shell — a persistent sidebar on desktop with two nav groups ("For you" and
 "Organizing"), a bottom navigation bar plus FAB on mobile — covering all twelve
@@ -343,7 +343,7 @@ future nav change.
 **Context.** The Vercel demo must show admin, judging and control-room screens to
 a visitor with no account, and must survive ~700 concurrent viewers. Those reads
 are gated behind org membership by [DATA_MODEL.md §6](DATA_MODEL.md), correctly —
-CLAUDE.md hard rule 3 says the client is never the authority.
+AGENT.md hard rule 3 says the client is never the authority.
 
 The first attempt used anonymous sign-in plus a self-issued read-only membership.
 Two things killed it: enabling Identity Platform programmatically requires
@@ -425,7 +425,7 @@ possible, and the Google Picker can sit on top of this without changing `FileRef
 
 **Context.** A participant's dashboard needs every registration they hold across
 challenges. Reading each challenge's `registrations` subcollection is N reads for
-N challenges. CLAUDE.md hard rule 2 requires a `collectionGroup` query to carry
+N challenges. AGENT.md hard rule 2 requires a `collectionGroup` query to carry
 an explicit security-rule justification recorded here.
 
 **Decision.** `fetchMyRegistrations` issues one `collectionGroup('registrations')`
@@ -526,7 +526,7 @@ equal the invite's exactly.
 **Date.** 2026-07-29 · **Status.** Accepted
 
 **Context.** Turning on `eslint-plugin-boundaries` (Phase 0 deliverable 0.2)
-surfaced **21 violations** of the dependency direction CLAUDE.md documents.
+surfaced **21 violations** of the dependency direction AGENT.md documents.
 Every one had the same two causes: `app/tokens.ts` and the `useAuth` context in
 `app/providers/AppProviders.tsx` are needed by every module and every shared
 primitive, so both were imported *upwards* from `modules/` into `app/`.
@@ -649,3 +649,73 @@ and the ADR-019 counter hatch stays bounded to two keys.
 * One test deliberately asserts the **presence** of the ADR-016 demo
   scaffolding. When it fails because the predicates are gone, delete the test —
   the failure is the reminder.
+
+---
+
+## ADR-024 — Email and password is the only sign-in method, and `/admin` sits behind a bundled key
+
+**Date.** 2026-07-31 · **Status.** Accepted
+
+**Context.** Sign-in was Google plus an anonymous guest handshake. Three
+problems, in increasing order of how much they cost:
+
+1. **Google sign-in is a deployment dependency, not just a code path.** It needs
+   an OAuth consent screen and an authorized-domain entry per host. The failure
+   mode is `auth/unauthorized-domain` on a fresh preview URL — an error that
+   reads as "you are not allowed" to the person seeing it and as a forgotten
+   console setting to everyone else.
+2. **Two credential shapes mean two recovery stories.** A Google account
+   recovers through Google; an anonymous one cannot recover at all. Every
+   account question — reset, verification, "I lost access" — had to be answered
+   twice, or answered once and be wrong half the time.
+3. **The guest handshake minted real accounts for people who wanted to look
+   around.** Browsing needs no identity at all, so the honest alternative to
+   signing in is *not signing in*, which the product already supports.
+
+Separately, there was no admin panel and no route that gathered the organizing
+surfaces into one place.
+
+**Decision.** Two parts.
+
+**Email and password only.** `core/firebase/auth.ts` exposes sign-in, sign-up,
+password reset and email verification, and nothing else. We own recovery, which
+is why reset and verification live in that module rather than being left to
+callers. Verification is load-bearing rather than decorative: ADR-020 grants
+every real permission through a redeemable invite, and `firestore.rules`
+requires `email_verified == true` to redeem one. Google accounts arrived
+verified; a password account does not, so sign-up sends the mail and the admin
+panel says so when it has not been acted on.
+
+**The admin panel is behind a key, and the key is a gate rather than a lock.**
+`/admin` requires a signed-in account plus `VITE_ADMIN_SECRET`, compared in the
+browser against a value that ships in the bundle. Anyone who opens devtools can
+read it. That is stated plainly in `core/auth/adminKey.ts`, in the gate's own
+UI, and in `.env.example`, because a gate that looks like a vault eventually has
+something put behind it that needed a real lock.
+
+It is nonetheless worth having, because hard rule 3 means it does not have to be
+the enforcement layer: every action the panel offers is a Firestore write
+evaluated against the caller's stored membership. Someone who forces the gate
+gets the chrome and `permission-denied` on everything they try. The key decides
+who is *shown* the console; the membership decides what works inside it.
+
+**Consequences.**
+
+* One credential shape, one recovery story, one place errors are explained
+  (`explain()` in `AuthContext`, which translates configuration failures into
+  the console setting that actually fixes them instead of the raw code).
+* No consent screen and no per-domain OAuth setup, so a new deploy host needs
+  one authorized-domain entry for Auth and nothing else.
+* We now carry password-reset and verification email delivery, and the
+  deliverability problems that come with them. `resendVerification` exists
+  because the first send can fail and must not strand the account.
+* The unlock is bound to a uid and stored in `sessionStorage`, so it ends with
+  the tab and does not survive a change of user on a shared machine.
+* **The upgrade path, when Blaze lands:** move the check behind a Cloud Function
+  that mints a custom claim, and gate the rules on the claim. `verifyAdminKey`
+  already compares in constant time so the comparison that moves server-side is
+  the right one rather than a `===` someone has to remember to replace.
+* Provisioning after sign-in is best-effort and cannot fail the session
+  (`provisionQuietly`). Firebase Auth has already issued the token by the time
+  Firestore is touched, so a `unavailable` on the user document is not a failed
+  sign-in and must not be reported as one.

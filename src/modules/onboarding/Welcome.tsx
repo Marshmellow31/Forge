@@ -44,7 +44,7 @@ const DOORS: Door[] = [
     icon: 'emoji_events',
     title: 'I want to enter challenges',
     body: 'Register, submit your work, track deadlines and see your results. Your entries and certificates stay with your account.',
-    cta: 'Continue with Google',
+    cta: 'Sign in to continue',
     needsAccount: true,
     accent: c.primaryContainer,
   },
@@ -53,7 +53,7 @@ const DOORS: Door[] = [
     icon: 'workspaces',
     title: 'I want to run challenges',
     body: 'Create a competition, frame the questions and requirements, invite judges, score entries and publish results.',
-    cta: 'Continue with Google',
+    cta: 'Sign in to continue',
     needsAccount: true,
     accent: c.success,
   },
@@ -70,18 +70,25 @@ const DOORS: Door[] = [
 
 export default function Welcome() {
   const nav = useNavigate();
-  const { user, signInGoogle, setMode, busy, error } = useAuth();
+  const { user, setMode, busy, error } = useAuth();
   const [pending, setPending] = useState<AppMode | null>(null);
 
-  const choose = async (door: Door) => {
+  const choose = (door: Door) => {
     setPending(door.mode);
     try {
+      // The surface is recorded *before* signing in, not after: it is what the
+      // door is actually choosing, and if someone abandons the sign-in form and
+      // comes back later, the answer they already gave should still hold.
+      setMode(door.mode);
+
       // Already signed in? Then the door is only a view preference and there is
       // no reason to make them authenticate again.
       if (door.needsAccount && !user) {
-        await signInGoogle();
+        // `next` carries them past sign-in to the surface they picked, so
+        // choosing a door is one decision rather than two.
+        nav(`/signin?next=${encodeURIComponent(HOME_FOR[door.mode])}`);
+        return;
       }
-      setMode(door.mode);
       nav(HOME_FOR[door.mode]);
     } finally {
       setPending(null);
@@ -156,7 +163,7 @@ export default function Welcome() {
               <Box
                 key={door.mode}
                 component="button"
-                onClick={() => void choose(door)}
+                onClick={() => choose(door)}
                 disabled={busy}
                 sx={{
                   textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit',

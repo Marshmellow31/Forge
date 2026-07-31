@@ -6,12 +6,12 @@
 
 ---
 
-**Last updated:** 2026-07-29
-**Updated by:** Claude (production hardening — writes, RBAC, Drive, tooling)
+**Last updated:** 2026-07-31
+**Updated by:** Agent (authentication rework + admin panel)
 **Current phase:** **Phases 0, 1 and 2 complete.** Phase 3 is blocked on Blaze, not effort
-**Repo state:** 15 screens on live Firestore (project forge-4d40a, org_demo seeded); the app now **writes**
+**Repo state:** 17 screens on live Firestore (project forge-4d40a, org_demo seeded); the app now **writes**
 **Build health:** typecheck clean · lint clean (0 errors, 0 warnings) ·
-**345 unit tests + 75 security-rules tests, all passing** · production build
+**365 unit tests + 75 security-rules tests, all passing** · production build
 clean, service worker generated · **22 routes walked in a real browser with 0
 console errors** · no route renders `NotBuiltYet` any more
 **Rules + indexes are DEPLOYED to `forge-4d40a`** (2026-07-29) and reads were
@@ -21,7 +21,26 @@ re-verified against them afterwards.
 
 ## 1. Where we are, in one paragraph
 
-**This session** turned a read-only demo into something with a spine. The three
+**This session (2026-07-31)** replaced the sign-in story and gave the product an
+admin console. Google and anonymous sign-in are gone; email and password is the
+only method (ADR-024), which buys one credential shape, one recovery story and
+no per-domain OAuth setup, at the cost of owning password reset and verification
+— both of which now live in `core/firebase/auth.ts`. Verification is not
+cosmetic: ADR-020 grants permissions through invites and the rules refuse to
+redeem one without `email_verified`, so the panel says so plainly instead of
+letting someone wonder why no role sticks. `/admin` is behind a key gate that
+the code, the UI and `.env.example` all describe as **a gate, not a lock** — it
+ships in the bundle, so it decides who is *shown* the console while
+`firestore.rules` decides what works inside it. One real defect was found and
+fixed while reviewing: post-sign-in Firestore provisioning could reject the
+whole sign-in, so a flaky connection reported "could not reach Cloud Firestore"
+to someone who was, in fact, signed in and about to be redirected. It is
+best-effort now (`provisionQuietly`), which is what the module's own comments
+already argued for the two writes but not for the reads.
+
+### The story before this session
+
+**The session before** turned a read-only demo into something with a spine. The three
 Phase 0 gaps that had been open since the beginning are closed: there is a test
 suite (**187 tests** over the form engine, the Drive parser, RBAC and slugging),
 ESLint runs with `eslint-plugin-boundaries`, and the layer rule is now *enforced*
@@ -37,10 +56,10 @@ scaffolding. Google Drive is integrated link-first (ADR-017) — paste a share
 link for an event cover or a file answer, with validation that explains what is
 wrong instead of failing silently.
 
-### The story before this session
+### Earlier still
 
 The demo runs end to end and now wears the **Forge design system** — a Material
-Design 3 "expressive" warm-amber scheme imported from the Claude Design project
+Design 3 "expressive" warm-amber scheme imported from the Agent Design project
 `Forge.dc.html`. Colour, radius, elevation and motion live in `app/tokens.ts`;
 `app/theme.ts` derives the MUI theme from them. The three old shells were
 collapsed into one `AppShell` (sidebar on desktop, bottom nav + FAB on mobile)
@@ -117,7 +136,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
       ParticipantLayout / PublicLayout, all three now deleted.
 - [x] `app/main.tsx` (root + ThemeProvider + BrowserRouter) · `app/App.tsx` (route tree)
 - [x] `shared/ui/NotBuiltYet.tsx` — placeholder for unwritten screens
-- [x] `.claude/launch.json` — `preview_start` config for the dev server
+- [x] `.agent/launch.json` — `preview_start` config for the dev server
 
 **Screens written (14)** — all on the design system
 - [x] S-01 Landing (the one screen outside `AppShell`) · S-03 Discover ·
@@ -199,7 +218,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
 
 | # | Feature | State |
 |---|---|---|
-| 1.1 | Google authentication | [x] sign-in, guest, `users/{uid}` bootstrap, invite redemption |
+| 1.1 | Authentication | [x] **email + password only** (ADR-024) — sign in, sign up, reset, verify, `users/{uid}` bootstrap, invite redemption. Google and guest sign-in removed |
 | 1.2 | Organization creation | [x] **done** — S-12, creator becomes owner |
 | 1.3 | Member invite + roles | [x] **done** — invites + 7 built-in roles (ADR-020) |
 | 1.4 | Workspaces | [x] **done** — create, rename, delete (refused while non-empty) |
@@ -216,6 +235,20 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
 | 1.15 | Result publishing | [x] **done** — S-60, idempotent, audited, notifies (ADR-022) |
 | 1.16 | Notifications | [x] **in-app**; push (FCM) deliberately out of scope |
 | 1.17 | Installable PWA | [x] **done** |
+
+**Screens added 2026-07-31 (2)**
+- [x] **S-02 Sign in / create account / reset** (`modules/auth/SignIn.tsx`) — one
+      screen for all three, because they are the same decision seen from
+      different angles and someone finds out which they need only after typing
+      their address. Client-side Zod validation (`core/auth/credentials.ts`) so
+      an empty field costs no round trip, an advisory strength meter that rates
+      length above punctuation, and a redirect that honours `?next=` and
+      `location.state.from` so a deep link survives the detour.
+- [x] **S-70 Admin panel** (`modules/admin/`) — `/admin`, behind an access-key
+      gate. Aggregates and links; owns nothing, so there is no second challenge
+      editor to drift. Scoped to one org — a cross-tenant console is exactly the
+      shape that breaks hard rule 2. Sections the account cannot use are shown
+      disabled *with the permission named*, not hidden.
 
 ### Phase 2 — started
 
@@ -396,7 +429,7 @@ thing. The 32 judging tests therefore cover the Cloud Function too. Verified:
 `counters` hatch. Those relaxations exist only because there was no server;
 leaving them once there is one would be the worst of both.
 
-**All four pure engines named in CLAUDE.md hard rule 8 now exist and are tested:**
+**All four pure engines named in AGENT.md hard rule 8 now exist and are tested:**
 `core/forms` (86) · `core/workflow` (49) · `core/rbac` (44) · `core/judging` (32).
 
 ### Dead-control audit (all 26 routes, done in a real browser)
@@ -417,9 +450,14 @@ app. It is now a link to `/o/{slug}`.
 ## 3. Next three actions (in order)
 
 1. **Get admin control.** Two routes, and the first needs nothing from anyone:
-   * **Create your own org.** Sign in at `/welcome` → "I want to run
-     challenges" → "Create an organization". You become its owner with every
-     permission, immediately. No seed, no service-account key.
+   * **Create your own org.** Create an account at `/signin` → verify the email
+     Firebase sends you → "I want to run challenges" → "Create an organization".
+     You become its owner with every permission, immediately. No seed, no
+     service-account key. The admin console is then at `/admin`, key
+     `VITE_ADMIN_SECRET` (default `forge2026` — change it per deployment).
+     **Email/Password must be enabled** under Firebase console →
+     Authentication → Sign-in method, or every attempt returns
+     `auth/configuration-not-found`; the sign-in screen explains that in full.
    * **Take ownership of the seeded demo org** (`org_demo`) instead:
      `OWNER_EMAIL=you@gmail.com npm run seed`. This needs a service-account key
      at `./serviceAccountKey.json` — the Admin SDK has no other credential, and
@@ -446,7 +484,7 @@ app. It is now a link to `/o/{slug}`.
 | Q5 | Teams in MVP or Phase 2? | Registration shape | Phase 2; `Registration.team` exists from day one so no migration |
 | Q6 | White-label / custom domains timing | Hosting + branding | Phase 3 |
 | **Q7** | **Keep `useFormEngine`, or move to React Hook Form as CONVENTIONS §6 mandates?** | The demo deviates from the documented stack — see ADR-013 | Revisit before the backend lands; do not build more forms on it until decided |
-| **Q8** | **Is the product called ChallengeOS or Forge?** | The running app, the `<title>`, the repo directory and the imported design system all say **Forge**; every doc (README, BRAIN, CLAUDE) says **ChallengeOS**. Both names are currently shipping. | Unresolved — **not renamed unilaterally.** Pick one, then sweep the docs or the UI to match |
+| **Q8** | **Is the product called ChallengeOS or Forge?** | The running app, the `<title>`, the repo directory and the imported design system all say **Forge**; every doc (README, BRAIN, AGENT) says **ChallengeOS**. Both names are currently shipping. | Unresolved — **not renamed unilaterally.** Pick one, then sweep the docs or the UI to match |
 
 ## 5. Known risks
 
@@ -465,7 +503,17 @@ app. It is now a link to `/o/{slug}`.
 
 ## 6. Decisions made this session
 
-**This session — five ADRs**, all in [DECISIONS.md](DECISIONS.md):
+**2026-07-31 — one ADR:**
+
+* **ADR-024 — email and password is the only sign-in method, and `/admin` sits
+  behind a bundled key.** Google and anonymous sign-in removed: one credential
+  shape, one recovery story, no per-domain OAuth. The admin key is documented
+  everywhere it appears as *a gate, not a lock* — it ships in the bundle, and
+  hard rule 3 is why it does not need to be more. Upgrade path when Blaze lands:
+  a Function that mints a custom claim, which is why `verifyAdminKey` already
+  compares in constant time.
+
+**The session before — five ADRs**, all in [DECISIONS.md](DECISIONS.md):
 
 * **ADR-017 — Drive is link-first, not upload-first.** Paste a share link; we
   derive a `FileRef`. No OAuth, no consent screen, no bytes stored, and no
@@ -499,7 +547,7 @@ Material Symbols Rounded — but is left installed pending a sweep.
 
 * **ADR-012 — Field registry is split into a pure half and a React half.**
   Resolves a genuine contradiction: SPEC_FORM_ENGINE §4 put React components in
-  `core/forms`, while CLAUDE.md hard rule 8 forbids React in `core/`. The spec
+  `core/forms`, while AGENT.md hard rule 8 forbids React in `core/`. The spec
   has been corrected to match.
 * **ADR-013 — Demo forms use a bespoke `useFormEngine` hook, not React Hook Form.**
   Recorded as a **deviation to revisit**, not a settled improvement. See Q7.

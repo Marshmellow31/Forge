@@ -52,6 +52,21 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   },
 ];
 
+/**
+ * Appended to the Organizing group once the admin panel has been unlocked.
+ *
+ * Not shown before then, because `/admin` is reached by knowing the URL and the
+ * key — advertising it in the sidebar to everyone would make the key the only
+ * thing standing between a curious participant and the console, and the key is
+ * in the bundle. Once you are through, a link is simply convenient.
+ */
+const ADMIN_NAV: NavItem = {
+  to: '/admin',
+  label: 'Admin panel',
+  icon: 'shield_person',
+  match: (p) => p.startsWith('/admin'),
+};
+
 const BOTTOM_NAV: NavItem[] = [
   { to: '/home', label: 'Home', icon: 'home' },
   { to: '/discover', label: 'Discover', icon: 'explore', match: (p) => p.startsWith('/discover') || p.startsWith('/c/') },
@@ -67,6 +82,7 @@ const SCREEN_TITLES: { test: (p: string) => boolean; title: string }[] = [
   { test: (p) => p.startsWith('/me/registrations'), title: 'My entries' },
   { test: (p) => p.startsWith('/me/achievements'), title: 'Awards' },
   { test: (p) => p.endsWith('/form'), title: 'Form builder' },
+  { test: (p) => p.startsWith('/admin'), title: 'Admin panel' },
   { test: (p) => /^\/org\/challenges\/[^/]+$/.test(p), title: 'Control room' },
   { test: (p) => p.startsWith('/org/challenges'), title: 'Challenges' },
   { test: (p) => p.startsWith('/org'), title: 'Organization' },
@@ -94,7 +110,7 @@ export default function AppShell() {
   const primaryLabel = inOrgContext ? 'New challenge' : 'Enter a challenge';
   const primaryTo = inOrgContext ? '/org/challenges/new' : '/discover';
   const screenTitle = SCREEN_TITLES.find((s) => s.test(pathname))?.title ?? 'Forge';
-  const { user, signOutNow, mode } = useAuth();
+  const { user, signOutNow, mode, adminUnlocked } = useAuth();
   const { data: profile } = useCurrentUser(user?.uid ?? 'u_self');
   const { data: myRegistrations = [] } = useMyRegistrations(user?.uid);
   const { data: challenges = [] } = useChallenges();
@@ -123,6 +139,10 @@ export default function AppShell() {
    */
   const visibleGroups = NAV_GROUPS.filter(
     (g) => g.title !== 'Organizing' || mode === null || mode === 'organizer',
+  ).map((g) =>
+    g.title === 'Organizing' && adminUnlocked
+      ? { ...g, items: [...g.items, ADMIN_NAV] }
+      : g,
   );
 
   return (
@@ -309,7 +329,7 @@ export default function AppShell() {
               <Tooltip title={user ? `Signed in as ${displayName} — sign out` : 'Sign in'}>
                 <Box
                   component={user ? 'button' : Link}
-                  to={user ? undefined : '/welcome'}
+                  to={user ? undefined : '/signin'}
                   aria-label={user ? `Signed in as ${displayName}. Sign out` : 'Sign in'}
                   onClick={user ? () => void signOutNow() : undefined}
                   sx={{

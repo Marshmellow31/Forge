@@ -6,7 +6,7 @@
  *
  * The React half (Input / Display / ConfigEditor) lives in
  * `modules/forms/fields/` so that `core/` stays free of React, per the
- * dependency rules in CLAUDE.md. Adding a field type means touching exactly
+ * dependency rules in AGENT.md. Adding a field type means touching exactly
  * two files — one here, one there — and no switch statement anywhere.
  *
  * See docs/SPEC_FORM_ENGINE.md §4

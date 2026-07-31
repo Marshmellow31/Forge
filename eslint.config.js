@@ -5,7 +5,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import boundaries from 'eslint-plugin-boundaries';
 
 /**
- * Phase 0 deliverable 0.2. The dependency direction in CLAUDE.md was documented
+ * Phase 0 deliverable 0.2. The dependency direction in AGENT.md was documented
  * but unenforced; this file is what makes a violation fail rather than merely
  * disappoint.
  *
@@ -110,7 +110,7 @@ export default tseslint.config(
     },
   },
 
-  // "No module imports another module" — the design smell CLAUDE.md calls out
+  // "No module imports another module" — the design smell AGENT.md calls out
   // by name. A module may import its own files freely; reaching into a sibling
   // is what is refused. Cross-feature needs go through core/ or a shared type.
   {
@@ -127,7 +127,7 @@ export default tseslint.config(
       }],
 
       /**
-       * "No module imports another module" (CLAUDE.md), enforced by path.
+       * "No module imports another module" (AGENT.md), enforced by path.
        *
        * `boundaries/dependencies` cannot express this here: its captured-value
        * selector for "same module as the importer" silently fails to match, so
@@ -147,7 +147,7 @@ export default tseslint.config(
           {
             group: ['@modules/*', '@modules/*/**'],
             message:
-              'No module imports another module (CLAUDE.md). Import your own module relatively (./x), and route a cross-feature need through core/ or shared/.',
+              'No module imports another module (AGENT.md). Import your own module relatively (./x), and route a cross-feature need through core/ or shared/.',
           },
         ],
         paths: [
@@ -168,8 +168,8 @@ export default tseslint.config(
     rules: {
       'no-restricted-imports': ['error', {
         patterns: [
-          { group: ['firebase', 'firebase/*', '@firebase/*'], message: 'Pure engine: no Firebase (CLAUDE.md hard rule 8).' },
-          { group: ['react', 'react-dom', 'react/*', '@mui/*'], message: 'Pure engine: no React (CLAUDE.md hard rule 8, ADR-012).' },
+          { group: ['firebase', 'firebase/*', '@firebase/*'], message: 'Pure engine: no Firebase (AGENT.md hard rule 8).' },
+          { group: ['react', 'react-dom', 'react/*', '@mui/*'], message: 'Pure engine: no React (AGENT.md hard rule 8, ADR-012).' },
         ],
       }],
     },

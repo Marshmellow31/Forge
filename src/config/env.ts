@@ -20,6 +20,18 @@ const EnvSchema = z.object({
   /** The organization the public demo reads from. See ADR-016. */
   VITE_DEMO_ORG_ID: z.string().min(1).default('org_demo'),
 
+  /**
+   * The key that reveals the admin panel (`/admin`). See ADR-024.
+   *
+   * Note the file header: everything in `import.meta.env` ships in the client
+   * bundle, so despite the name this is **not** a secret in the cryptographic
+   * sense — it is readable by anyone who opens devtools. It gates what the UI
+   * *shows*; `firestore.rules` gates what anyone can actually do. It lives in
+   * env rather than in the source so a deployment can change it without a code
+   * edit, and so it is one variable to rotate.
+   */
+  VITE_ADMIN_SECRET: z.string().min(1).default('forge2026'),
+
   /** Point the SDK at a local emulator suite instead of production. */
   VITE_USE_EMULATOR: z
     .enum(['true', 'false'])

@@ -12,7 +12,7 @@ import type { Challenge } from '@shared/types/domain';
  *
  * Lives in `shared/ui` rather than `modules/challenges` because three separate
  * modules render it — discovery, organizations and challenges — and a module
- * importing another module is the design smell CLAUDE.md calls out by name.
+ * importing another module is the design smell AGENT.md calls out by name.
  * It is presentational over a shared domain type, which is exactly what
  * `shared/` is for.
  */

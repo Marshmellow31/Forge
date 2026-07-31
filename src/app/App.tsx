@@ -15,6 +15,18 @@ import { c } from '@shared/design/tokens';
  */
 const Landing = lazy(() => import('@modules/discovery/Landing'));
 const Welcome = lazy(() => import('@modules/onboarding/Welcome'));
+const SignIn = lazy(() => import('@modules/auth/SignIn'));
+/**
+ * Both halves of `/admin` are lazy, and that is load-bearing rather than
+ * incidental: `React.lazy` fetches on *render*, not on element creation, so the
+ * panel's chunk is not requested until `AdminGate` decides to render its
+ * children. Someone who never enters the key never downloads the console.
+ * (Which is a bandwidth property, not a security one — see `core/auth/adminKey.ts`.)
+ */
+const AdminPanel = lazy(() => import('@modules/admin/AdminPanel'));
+const AdminGate = lazy(() =>
+  import('@modules/admin/AdminGate').then((m) => ({ default: m.AdminGate })),
+);
 const Discover = lazy(() => import('@modules/discovery/Discover'));
 const ChallengePublic = lazy(() => import('@modules/challenges/ChallengePublic'));
 const ChallengesList = lazy(() => import('@modules/challenges/ChallengesList'));
@@ -70,6 +82,9 @@ export default function App() {
             shell's nav assumes you have already chosen a surface. */}
         <Route path="/" element={<Landing />} />
         <Route path="/welcome" element={<Welcome />} />
+        {/* Sign-in is its own full-bleed screen: the shell's nav and search are
+            chrome for someone who is already in. */}
+        <Route path="/signin" element={<SignIn />} />
         {/* Public organization page — shareable, works signed out. */}
         <Route path="/o/:slug" element={<PublicOrgPage />} />
 
@@ -107,6 +122,14 @@ export default function App() {
           {/* Judging */}
           <Route path="/judge" element={<JudgeQueue />} />
           <Route path="/judge/score/:sid" element={<ScoringScreen />} />
+
+          {/* The admin panel, behind the access key. Inside the shell so an
+              admin keeps their navigation — the gate hides the console, not the
+              rest of the product. */}
+          <Route
+            path="/admin"
+            element={<AdminGate><AdminPanel /></AdminGate>}
+          />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

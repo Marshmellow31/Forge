@@ -25,7 +25,7 @@ import type { Challenge } from '@shared/types/domain';
  *
  * This is where "admins have full control" actually lives: every property of a
  * competition an organiser could want to change is here, as data, with nothing
- * hardcoded (CLAUDE.md hard rule 1). The form *questions* are a separate screen
+ * hardcoded (AGENT.md hard rule 1). The form *questions* are a separate screen
  * — the form builder — because a schema is versioned and immutable once
  * published while these settings are freely editable, and mixing the two would
  * force a version bump every time someone fixed a typo in the prize.

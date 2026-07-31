@@ -223,7 +223,7 @@ describe('registry integrity', () => {
       ['date', '2026-07-29'],
       ['rating', 4],
       ['url', 'https://example.com'],
-      ['githubRepo', 'https://github.com/anthropics/claude-code'],
+      ['githubRepo', 'https://github.com/anthropics/agent-code'],
       ['phone', '+91 99999 11111'],
       ['time', '14:30'],
       ['datetime', '2026-07-29T14:30'],
@@ -329,7 +329,7 @@ describe('registry integrity', () => {
 describe('schema versions are immutable once published', () => {
   const v1 = schemaOf([field({ key: 'title', required: true })], { id: 'sch_x_v1', version: 1, status: 'published' });
 
-  // v2 adds a required field. CLAUDE.md hard rule 6: an entry made against v1
+  // v2 adds a required field. AGENT.md hard rule 6: an entry made against v1
   // must keep validating against v1 forever.
   const v2: FormSchema = {
     ...v1,
