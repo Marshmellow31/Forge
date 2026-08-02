@@ -963,3 +963,80 @@ been — the *write* rules were always correct. What leaked was reading.
   does not verify the caller is registered for the challenge (ADR-026); and
   uploaded photos are shared `anyone/reader`, so a Drive link is a public URL
   — correct for a photography competition, wrong for anything confidential.
+
+---
+
+## ADR-028 — Closing the gaps ADR-026 and ADR-027 recorded
+
+**Date.** 2026-08-01 · **Status.** Accepted · **Amends** ADR-019, ADR-026, ADR-027
+
+**Context.** ADR-026 and ADR-027 each ended with a list of things written down
+rather than fixed. Writing a risk down is only worth doing if the list is
+eventually worked; this is that pass.
+
+**Decisions.**
+
+**The upload endpoint checks registration after all.** ADR-026 said this needed
+the Admin SDK and a second long-lived credential in the serverless environment.
+It does not: Firestore's REST API accepts a **Firebase ID token**, so the server
+can ask the question *as the caller*, with the credential they already
+presented. `firestore.rules` allows `rid == uid()` on a registration, so a
+caller can read their own and nothing else — exactly the question being asked.
+No new secret exists and the check inherits the rules rather than restating
+them. It fails closed.
+
+**The ADR-019 counter hatch is narrowed.** It read `isSignedIn() &&
+onlyChanges(['counters','updatedAt'])`, which bounded what one write could do
+and said nothing about who could do it — any account with a session could
+rewrite the entrant count on any challenge in any tenant. It now also requires a
+registration in that challenge, which costs one `exists()` and removes the
+cross-tenant reach entirely. The residual risk is an entrant inflating a count
+on a competition they entered: visible, bounded, recomputable. Safe for the
+registration flow because `bumpCounter` runs *after* `writeRegistration`
+resolves, not in the same batch, so the document exists when the rule evaluates.
+
+**A per-account rate limit** on `upload-session`, and the code says plainly that
+it is a speed bump: the counter lives in one serverless instance's memory and
+there are many instances. It stops a stuck retry loop, not a distributed
+attacker. What keeps the endpoint safe is the token check and the registration
+check.
+
+**A Drive quota warning.** ADR-026 moved storage onto the organiser's own 15 GB
+and the failure mode is silent until it is urgent — uploads begin failing
+mid-competition and the first to notice is an entrant at a deadline.
+`GET /api/drive/quota` reports account-wide usage (Drive quota is account-wide,
+so a number scoped to our own files would be reassuring and useless) and the
+panel warns above 85%.
+
+**The `demoViewer` self-issued membership is deleted.** It could never succeed —
+the rules admit a member three ways and a self-issued role is none of them — so
+every call was a guaranteed denial caught by a `catch` that discarded it.
+
+**Tests for the code that had none.** `api/_lib/auth.ts` — the ID-token check in
+front of the upload endpoints — had never been executed by anything, because
+`api/**` was outside the vitest glob. It now has 18 tests covering `alg=none`,
+HS256 confusion, a token from another Firebase project, claims swapped under a
+valid signature, expiry, unknown key ids, and failing closed when Google's
+certificate endpoint is unreachable. `core/storage` has 17, concentrated on
+failure mapping.
+
+**Two bugs found while verifying, both real.**
+
+1. **A failed font fetch was cached for a year.** The PWA's `google-fonts`
+   runtime cache allowed `statuses: [0, 200]`. Status 0 is an opaque response,
+   which for a CORS-enabled origin like Google Fonts means the request did not
+   succeed — so one flaky moment cached a failure under `CacheFirst` with a
+   one-year expiry, and every icon in the product rendered as its ligature text
+   (`search`, `home`, `check`) for that visitor until they cleared site data.
+   Observed directly while verifying the production headers. Now `[200]` only.
+   The Drive-thumbnail rule keeps status 0, where opaque is the expected shape.
+2. **`scripts/serve-dist.mjs`** exists because that bug was only findable by
+   serving the real build with the real headers. `vite preview` sends none of
+   them, so the entire class of production-only header bug was invisible before
+   deploying. `NO_CSP=1` and `CSP="…"` are there for bisecting.
+
+**Consequence worth stating:** the CSP added in ADR-027 was verified against the
+production build — Material Symbols, Google Fonts, Firestore and the SPA all
+load clean under it. It was briefly suspected of breaking the icon font; it was
+not the cause, and the control test (same font, same browser, no CSP) is what
+established that rather than an assumption either way.

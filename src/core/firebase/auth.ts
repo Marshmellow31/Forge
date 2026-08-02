@@ -29,11 +29,11 @@ import { claimInvite } from '@core/sync';
  * redemption (ADR-020 requires `email_verified`) and it cannot own an
  * organization. That is the shape of the thing, not a bug: see `isGuest`.
  *
- * The demo needs a viewer with *no account* to see admin and judge screens,
- * which the documented rules gate behind org membership. Rather than weaken the
- * rules globally, sign-in provisions a read-only membership in the single demo
- * org. See ADR-016 — this is demo scaffolding and must be removed before the
- * product serves a second real tenant.
+ * Signing in also **provisions**: it creates `users/{uid}` and redeems a pending
+ * invite if one is addressed to this verified address (ADR-020). That is the
+ * only route to a real permission, and it is the reason `provision` refreshes
+ * the ID token before touching Firestore — the `email_verified` claim is baked
+ * in when the token is minted.
  */
 
 export type AuthUser = User;
@@ -162,11 +162,12 @@ async function provisionQuietly(user: User): Promise<void> {
 }
 
 /**
- * Creates `users/{uid}` and a `demoViewer` membership on first sign-in.
+ * Creates `users/{uid}` on first sign-in, and redeems a pending invite.
  *
- * Both writes are idempotent and both are constrained by security rules: a user
- * may only write their own user doc, and may only self-issue a membership in
- * `demoOrgId()` with the `demoViewer` role and no permissions beyond reading.
+ * Idempotent, and constrained by security rules throughout: a user may only
+ * write their own user document, and the only membership they may create is the
+ * one an invite already granted them — checked field-for-field by the rules, so
+ * the client redeems a grant and never mints one (ADR-020).
  */
 async function provision(user: User) {
   /**
@@ -241,36 +242,15 @@ async function provision(user: User) {
     // failing sign-in over a missing invite would be the wrong trade.
   }
 
-  // No invite: a read-only viewer. This is ADR-016 demo scaffolding and is
-  // removed with the rest of it before a second real tenant exists.
+  // The ADR-016 fallback — self-issuing a read-only `demoViewer` membership —
+  // used to live here and is deleted (ADR-028). It could never succeed:
+  // `firestore.rules` admits a new member three ways (an admin adds you, you
+  // redeem an invite, or you are the org's `ownerId`) and a self-issued role is
+  // none of them, so every call was a guaranteed `permission-denied` caught by
+  // a `catch` that discarded it. Hardening the demo org (ADR-027) removed the
+  // last reason to keep pretending otherwise.
   //
-  // Best-effort, like the invite claim above it. `firestore.rules` admits a new
-  // member three ways — an admin adds you, you redeem an invite, or you are the
-  // org's `ownerId` — and a self-issued `demoViewer` is none of them, so this
-  // write is *denied* on any org the caller has no other claim to. That is the
-  // rules being right. What would be wrong is letting the refusal reject the
-  // sign-in: the account exists, it is signed in, and it can browse, register
-  // and create an organization of its own without this document. Surfacing
-  // "PERMISSION_DENIED" on a successful sign-up reports a failure that did not
-  // happen.
-  try {
-    await setDoc(memberRef, {
-      userId: user.uid,
-      email: user.email ?? '',
-      displayName: user.displayName ?? fallbackName,
-      photoURL: user.photoURL ?? null,
-      roleIds: ['demoViewer'],
-      resolvedPermissions: [],
-      directPermissions: [],
-      scopedGrants: [],
-      status: 'active',
-      joinedAt: serverTimestamp(),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      createdBy: user.uid,
-      schemaVersion: 1,
-    });
-  } catch {
-    /* see above — no membership in the demo org, which is not a sign-in failure */
-  }
+  // Not having a membership is the correct outcome for someone who arrived
+  // without an invite: they can browse, enter competitions and create an
+  // organization of their own, none of which needs one.
 }

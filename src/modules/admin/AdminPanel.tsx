@@ -9,6 +9,7 @@ import { c, radius, mono, ease } from '@shared/design/tokens';
 import { useAuth, usePermissions } from '@core/auth';
 import { unlockRemainingMs } from '@core/auth/adminKey';
 import { PERMISSIONS, type Permission } from '@core/rbac';
+import { useDriveQuota, humanBytes, QUOTA_WARN_AT } from '@core/storage/useDriveQuota';
 import {
   useOrg, useChallenges, useMembers, useAuditLog, useWorkspaces, useInvites,
 } from '@core/firebase/hooks';
@@ -133,6 +134,7 @@ export default function AdminPanel() {
   const { data: invites = [] } = useInvites();
   const { data: workspaces = [] } = useWorkspaces();
   const { data: auditLog = [] } = useAuditLog();
+  const { data: quota } = useDriveQuota();
 
   const totals = challenges.reduce(
     (acc, ch) => ({
@@ -261,6 +263,30 @@ export default function AdminPanel() {
           >
             Resend email
           </Button>
+        </Stack>
+      )}
+
+      {/* Entrants' photographs land on the organisation's own Drive (ADR-026),
+          so running out is a competition-stopping event that arrives without
+          warning — the first symptom is an entrant's upload failing at a
+          deadline. Silent below the threshold; nobody needs a storage gauge on
+          a screen they opened to check registrations. */}
+      {quota?.connected && quota.fraction !== null && quota.fraction >= QUOTA_WARN_AT && (
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          alignItems={{ sm: 'center' }}
+          gap={2}
+          sx={{ mb: 2.5, p: 2.5, borderRadius: `${radius.panel}px`, background: c.errorContainer }}
+        >
+          <Icon name="cloud_alert" size={22} color={c.errorInk} />
+          <Typography sx={{ flex: 1, fontSize: 13.5, color: c.errorBody, lineHeight: 1.6 }}>
+            <b>The Drive holding entries is {Math.round(quota.fraction * 100)}% full</b>
+            {' '}({humanBytes(quota.usageBytes)}
+            {quota.limitBytes ? ` of ${humanBytes(quota.limitBytes)}` : ''}
+            {quota.account ? `, ${quota.account}` : ''}). Uploads start failing when it fills, and
+            the person who finds out is an entrant at a deadline. Free some space or connect a
+            different account.
+          </Typography>
         </Stack>
       )}
 

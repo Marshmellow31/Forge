@@ -111,3 +111,47 @@ export async function verifyIdToken(
     emailVerified: Boolean(payload.email_verified),
   };
 }
+
+/**
+ * Is this caller actually registered for this challenge?
+ *
+ * ADR-026 recorded this as a known gap, on the assumption that checking it
+ * needed the Admin SDK and a service-account key in the serverless environment
+ * — a second long-lived credential to hold and rotate.
+ *
+ * It does not. Firestore has a REST API that accepts a **Firebase ID token**,
+ * so the server can ask the database this question *as the caller*, using the
+ * credential they already presented. `firestore.rules` allows
+ * `rid == uid()` on a registration, so a caller can read their own and nothing
+ * else — which is exactly the question being asked. No new secret exists, and
+ * the check inherits the rules rather than reimplementing them.
+ *
+ * Fails **closed**: anything other than a clear "yes" is treated as not
+ * registered. The alternative — letting a Firestore blip open the upload
+ * endpoint to unregistered callers — is the wrong direction to fail in for a
+ * check whose entire purpose is to keep it shut.
+ */
+export async function isRegisteredFor(
+  idToken: string,
+  projectId: string,
+  orgId: string,
+  challengeId: string,
+  uid: string,
+): Promise<boolean> {
+  // Path segments come from a verified token and a validated request body, but
+  // they are interpolated into a URL, so anything unexpected is refused rather
+  // than encoded and hoped for.
+  if (![orgId, challengeId, uid].every((v) => /^[A-Za-z0-9_-]{1,128}$/.test(v))) return false;
+
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)`
+    + `/documents/organizations/${orgId}/challenges/${challengeId}/registrations/${uid}`;
+
+  try {
+    const response = await fetch(url, {
+      headers: { authorization: `Bearer ${idToken.replace(/^Bearer\s+/i, '')}` },
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}

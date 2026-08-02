@@ -11,7 +11,7 @@
 **Current phase:** **Phases 0, 1 and 2 complete.** Phase 3 is blocked on Blaze, not effort
 **Repo state:** 18 screens on live Firestore (project forge-4d40a, org_demo seeded); the app now **writes**
 **Build health:** typecheck clean · lint clean (0 errors, 0 warnings) ·
-**386 unit tests + 87 security-rules tests, all passing** · production build
+**421 unit tests + 92 security-rules tests, all passing** · production build
 clean, service worker generated · no route renders `NotBuiltYet` any more
 **Rules + indexes are DEPLOYED to `forge-4d40a`** (2026-07-29) and reads were
 re-verified against them afterwards.
@@ -76,6 +76,29 @@ swallows refusals by design), and a stale query cache told a freshly-provisioned
 admin they were not a member until they reloaded. Both fixed and re-verified end
 to end on the emulator: sign up → verify → admin door → invite redeemed →
 console loads, first try, no reload.
+
+**Gap-closing pass (ADR-028).** Everything ADR-026 and ADR-027 recorded as
+"known, not fixed" is now fixed, except what needs a Google console. The upload
+endpoint verifies the caller is registered for the challenge — no second
+credential needed, because Firestore's REST API takes the caller's own ID token
+and the rules already scope it. The ADR-019 counter hatch now requires a
+registration in the challenge, removing its cross-tenant reach. Rate limiting,
+a Drive quota warning above 85%, and the deletion of the `demoViewer` fallback
+that could never succeed.
+
+**The untested code is tested.** `api/**` was outside the vitest glob, so
+`api/_lib/auth.ts` — the ID-token check standing in front of the upload
+endpoints — had never been executed. 18 tests now cover `alg=none`, HS256
+confusion, cross-project audience, tampered claims, expiry and failing closed.
+`core/storage` has 17.
+
+**The CSP is verified**, not assumed: `npm run serve:dist` serves the real build
+with the real `vercel.json` headers, because `vite preview` sends none of them
+and production-only header bugs are otherwise invisible until deploy. That found
+a genuine bug — the PWA cached *failed* Google Font responses (`statuses: [0,
+200]`, `CacheFirst`, one-year expiry), so one flaky moment left a visitor with
+every icon rendered as its ligature text, permanently, until they cleared site
+data.
 
 **Two things still need a human** — see §Open Questions: the Anonymous provider
 is off in the Firebase console (guest sign-in reports exactly that, by design),

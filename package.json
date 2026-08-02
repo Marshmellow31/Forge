@@ -8,6 +8,7 @@
     "dev:emulator": "vite --mode emulator",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "serve:dist": "node scripts/serve-dist.mjs",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

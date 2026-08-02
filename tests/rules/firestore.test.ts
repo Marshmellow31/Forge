@@ -179,12 +179,50 @@ describe('challenges', () => {
  * ================================================================== */
 
 describe('counters (ADR-019)', () => {
-  it('lets any signed-in user bump a counter', async () => {
+  /**
+   * NARROWED by ADR-028. This case asserted "any signed-in user", which was an
+   * accurate description of the rule and a bad property to have: an account
+   * with no relationship to a tenant could rewrite its entrant counts. The
+   * hatch now additionally requires a registration in the challenge, which is
+   * the population that legitimately moves the number.
+   *
+   * `u_member` is seeded without a registration, so it is now refused — and
+   * that refusal is the point of the change.
+   */
+  it('DENIES a signed-in user with no registration in the challenge', async () => {
+    const db = asUser('u_member');
+    await assertFails(updateDoc(doc(db, 'organizations', ORG, 'challenges', CHALLENGE), {
+      'counters.registrations': 1,
+      updatedAt: new Date(),
+    }));
+  });
+
+  it('lets an entrant bump a counter — registering is what the hatch exists for', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), 'organizations', ORG, 'challenges', CHALLENGE, 'registrations', 'u_member'),
+        { userId: 'u_member', status: 'pending' },
+      );
+    });
     const db = asUser('u_member');
     await assertSucceeds(updateDoc(doc(db, 'organizations', ORG, 'challenges', CHALLENGE), {
       'counters.registrations': 1,
       updatedAt: new Date(),
     }));
+  });
+
+  it('DENIES reaching across tenants even with a registration of your own', async () => {
+    // The registration is in org_a; the write targets org_b.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), 'organizations', ORG, 'challenges', CHALLENGE, 'registrations', 'u_member'),
+        { userId: 'u_member', status: 'pending' },
+      );
+    });
+    await assertFails(updateDoc(
+      doc(asUser('u_member'), 'organizations', OTHER_ORG, 'challenges', CHALLENGE),
+      { 'counters.registrations': 9999, updatedAt: new Date() },
+    ));
   });
 
   it('denies a signed-out visitor bumping a counter', async () => {
@@ -879,6 +917,36 @@ describe('ADR-027 — org_demo is not a public data set', () => {
    */
   it('lets a stranger read their own (absent) membership — the bootstrap depends on it', async () => {
     await assertSucceeds(getDoc(doc(asUser('u_newcomer'), 'organizations', DEMO, 'members', 'u_newcomer')));
+  });
+
+  /**
+   * ADR-028 — the counter hatch is no longer open to the whole internet.
+   *
+   * ADR-019 traded a Cloud Function for "any signed-in client may change
+   * `counters`", because registering has to move that number and on Spark
+   * nothing else can. The bound was two fields, which limits what one write can
+   * do and says nothing about who may do it — so any account with a session
+   * could rewrite the entrant count on any challenge in any tenant.
+   */
+  it('DENIES a signed-in stranger moving the counters on a challenge they never entered', async () => {
+    await assertFails(updateDoc(
+      doc(asUser('u_random'), 'organizations', DEMO, 'challenges', CHALLENGE),
+      { counters: { registrations: 99999, submissions: 0, reviewsCompleted: 0, reviewsPending: 0 } },
+    ));
+  });
+
+  it('still lets an entrant move them — registering is what the hatch is for', async () => {
+    await assertSucceeds(updateDoc(
+      doc(asUser('u_entrant', 'ada@example.com'), 'organizations', DEMO, 'challenges', CHALLENGE),
+      { counters: { registrations: 2, submissions: 0, reviewsCompleted: 0, reviewsPending: 0 } },
+    ));
+  });
+
+  it('DENIES an entrant using the hatch to change anything but the counters', async () => {
+    await assertFails(updateDoc(
+      doc(asUser('u_entrant', 'ada@example.com'), 'organizations', DEMO, 'challenges', CHALLENGE),
+      { title: 'Renamed by an entrant' },
+    ));
   });
 
   it('still denies reading somebody else’s membership', async () => {

@@ -307,8 +307,28 @@ service cloud.firestore {
         // The residual risk — a member inflating a count — is visible, bounded
         // to their own org, and recomputable from the registrations themselves.
         // Recorded as ADR-019; it reverts to a Function the day billing is on.
+        //
+        // NARROWED (ADR-028). The counter hatch used to read
+        // `isSignedIn() && onlyChanges([...])`, which let *any* account with a
+        // session move the counters on *any* challenge in *any* organization —
+        // including tenants it had no relationship with at all. The bound was
+        // "only two fields", which is a bound on the blast radius per write and
+        // not on who may write.
+        //
+        // Adding "and you have a registration in this challenge" costs one
+        // `exists()` and removes the cross-tenant reach entirely: the only
+        // people who can touch a challenge's counters are people who entered
+        // it, which is exactly the population that legitimately needs to
+        // (registering is what moves the number, and on Spark there is no
+        // Function to own it — ADR-019).
+        //
+        // The residual risk is unchanged in kind and much smaller in scope: an
+        // entrant can inflate the count on a competition they entered. Visible,
+        // bounded, and recomputable from the registrations themselves.
         allow update: if hasPerm(orgId, 'challenge.update')
-                      || (isSignedIn() && onlyChanges(['counters', 'updatedAt']));
+                      || (isSignedIn()
+                          && onlyChanges(['counters', 'updatedAt'])
+                          && exists(/databases/$(database)/documents/organizations/$(orgId)/challenges/$(cid)/registrations/$(uid())));
 
         allow delete: if hasPerm(orgId, 'challenge.delete');
 
