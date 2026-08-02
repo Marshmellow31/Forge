@@ -110,6 +110,16 @@ export const statusPill: Record<string, { bg: string; fg: string }> = {
   underReview: { bg: c.primary, fg: c.onPrimary },
   reviewed: { bg: c.success, fg: c.onSuccess },
   draftEntry: { bg: c.surfaceField, fg: c.inkMuted },
+  /* registration states — the admin roster (ADR-025). `disqualified` is the
+     only one in the error palette: it is the only one that is a *decision made
+     about* the participant rather than a place they reached. */
+  pending: { bg: c.surfaceField, fg: c.inkMuted },
+  active: { bg: c.primaryContainer, fg: c.onPrimaryContainer },
+  winner: { bg: c.success, fg: c.onSuccess },
+  eliminated: { bg: c.surfaceField, fg: c.inkMuted },
+  withdrawn: { bg: c.surfaceField, fg: c.inkMuted },
+  disqualified: { bg: c.errorContainer, fg: c.errorInk },
+  suspended: { bg: c.errorContainer, fg: c.errorInk },
 };
 
 export const pillFor = (status: string) =>

@@ -1,6 +1,7 @@
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   sendEmailVerification, sendPasswordResetEmail, updateProfile,
+  GoogleAuthProvider, signInWithPopup, signInAnonymously,
   signOut as fbSignOut, onAuthStateChanged, type User,
 } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
@@ -10,12 +11,23 @@ import { claimInvite } from '@core/sync';
 /**
  * Authentication and first-run provisioning.
  *
- * **Email and password is the only sign-in method.** Google and anonymous
- * sign-in were removed deliberately (ADR-024): one credential shape means one
- * account-recovery story, one place errors are explained, and no dependency on
- * a third-party consent screen or a per-domain OAuth configuration. The cost is
- * that we own password reset and email verification, which is why both live
- * here rather than being left to the caller.
+ * **Three ways in, for two different audiences** (ADR-025, amending ADR-024):
+ *
+ * * **Email and password** — the method that works for everyone, and the only
+ *   one the admin door accepts. We own reset and verification, which is why
+ *   both live here rather than being left to the caller.
+ * * **Google** — one tap for a participant who has an account already, and it
+ *   arrives `emailVerified`, so an invite is redeemable immediately. The cost
+ *   ADR-024 named is real and unchanged: it needs an authorized-domain entry
+ *   per host, and `explain()` in `AuthContext` says exactly that when it bites.
+ * * **Guest** — an anonymous session, deliberately temporary. It exists so the
+ *   product can be walked end to end while the real accounts are still being
+ *   set up. It needs the **Anonymous provider enabled** in the Firebase console;
+ *   without it every call fails `auth/admin-restricted-operation`.
+ *
+ * A guest has no email, so `firestore.rules` will refuse it an invite
+ * redemption (ADR-020 requires `email_verified`) and it cannot own an
+ * organization. That is the shape of the thing, not a bug: see `isGuest`.
  *
  * The demo needs a viewer with *no account* to see admin and judge screens,
  * which the documented rules gate behind org membership. Rather than weaken the
@@ -65,9 +77,47 @@ export const signUpWithEmail = async (
   return cred.user;
 };
 
+/**
+ * One tap, for someone who already has a Google account.
+ *
+ * A popup rather than a redirect: a redirect loses whatever the page was in the
+ * middle of, and the `?next=` the sign-in screen is carrying with it. The
+ * popup's own failure modes (blocked, closed, superseded) are explained in
+ * `AuthContext`, because to a person they are three different problems.
+ */
+export const signInWithGoogle = async () => {
+  const cred = await signInWithPopup(auth(), new GoogleAuthProvider());
+  await provisionQuietly(cred.user);
+  return cred.user;
+};
+
+/**
+ * A look around with no account at all — **temporary scaffolding**.
+ *
+ * Enable the Anonymous provider in Firebase console → Authentication →
+ * Sign-in method for this to work at all. It is here so the product can be
+ * demonstrated end to end before real accounts exist, and it should be removed
+ * with the rest of the ADR-016 demo scaffolding rather than becoming a
+ * supported way to use Forge: a guest cannot recover their session, cannot be
+ * granted a role (no verified email to address an invite to), and loses
+ * everything the moment they clear site data.
+ */
+export const signInAsGuest = async () => {
+  const cred = await signInAnonymously(auth());
+  await provisionQuietly(cred.user);
+  return cred.user;
+};
+
+/** True for an anonymous session. Screens use it to explain the ceiling. */
+export const isGuest = (user: User | null): boolean => Boolean(user?.isAnonymous);
+
 export const resendVerification = async () => {
   const current = auth().currentUser;
-  if (current && !current.emailVerified) await sendEmailVerification(current);
+  // An anonymous session has no address to send to; asking Firebase anyway
+  // fails with a code about the operation rather than about the missing email.
+  if (current && current.email && !current.emailVerified) {
+    await sendEmailVerification(current);
+  }
 };
 
 /**
@@ -119,13 +169,39 @@ async function provisionQuietly(user: User): Promise<void> {
  * `demoOrgId()` with the `demoViewer` role and no permissions beyond reading.
  */
 async function provision(user: User) {
+  /**
+   * Force a fresh ID token before touching Firestore.
+   *
+   * This is not belt-and-braces; without it the first admin silently fails to
+   * get their role. `firestore.rules` gates invite redemption on
+   * `request.auth.token.email_verified`, and that claim is baked into the token
+   * at the moment it is minted. A token issued at sign-up says `false`, is
+   * cached for an hour, and does not learn that the address was verified in the
+   * meantime — so redemption is refused, `claimInvite` swallows the refusal by
+   * design, and the account lands with no membership and no error anywhere.
+   *
+   * `getIdToken(true)` round-trips the server and returns a token carrying the
+   * current claims. It also closes a smaller race: Firestore picks up the auth
+   * state asynchronously after sign-in resolves, so awaiting a token here means
+   * the first write below cannot go out on a stale context.
+   *
+   * Failure is not fatal — offline, the cached token is the best available and
+   * the rest of `provision` is already best-effort.
+   */
+  try {
+    await user.getIdToken(true);
+  } catch {
+    /* keep the cached token; provisioning is best-effort either way */
+  }
+
   const userRef = doc(db(), 'users', user.uid);
   const existing = await getDoc(userRef);
 
   // An email account has no photo and often no name until it sets one, so the
   // local part of the address is a better fallback than "Demo Guest" — it is at
-  // least something the person recognises as themselves in a member list.
-  const fallbackName = user.email?.split('@')[0] ?? 'Member';
+  // least something the person recognises as themselves in a member list. An
+  // anonymous session has neither, and "Guest" is the honest label for it.
+  const fallbackName = user.email?.split('@')[0] ?? (user.isAnonymous ? 'Guest' : 'Member');
 
   if (!existing.exists()) {
     await setDoc(userRef, {

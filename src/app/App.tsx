@@ -24,6 +24,7 @@ const SignIn = lazy(() => import('@modules/auth/SignIn'));
  * (Which is a bandwidth property, not a security one — see `core/auth/adminKey.ts`.)
  */
 const AdminPanel = lazy(() => import('@modules/admin/AdminPanel'));
+const AdminParticipants = lazy(() => import('@modules/admin/Participants'));
 const AdminGate = lazy(() =>
   import('@modules/admin/AdminGate').then((m) => ({ default: m.AdminGate })),
 );
@@ -129,6 +130,13 @@ export default function App() {
           <Route
             path="/admin"
             element={<AdminGate><AdminPanel /></AdminGate>}
+          />
+          {/* Each admin screen carries its own gate rather than sharing a
+              layout route: the gate is cheap, and a nested layout would render
+              the panel's chrome around a screen the key has not opened. */}
+          <Route
+            path="/admin/participants"
+            element={<AdminGate><AdminParticipants /></AdminGate>}
           />
         </Route>
 

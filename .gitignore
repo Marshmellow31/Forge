@@ -55,3 +55,6 @@ dev-dist
 # Cloud Functions build output and deps (functions/ is not deployed on Spark)
 functions/lib
 functions/node_modules
+
+# Every local env file, including mode-specific ones (.env.emulator.local).
+.env*.local

@@ -264,6 +264,50 @@ describe('registry integrity', () => {
     }
   });
 
+  describe('driveLink with config.purpose = "image"', () => {
+    const photo = field({ type: 'driveLink', key: 'photo', config: { purpose: 'image' } });
+    const attachment = field({ type: 'driveLink', key: 'attachment' });
+    const parse = (f: typeof photo, v: string) =>
+      getFieldType('driveLink').buildValidator(f).safeParse(v);
+
+    const FILE = 'https://drive.google.com/file/d/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUv/view';
+    const FOLDER = 'https://drive.google.com/drive/folders/1iQDE08YnBsOQw2YbCQsNEAgJvxt8trsu';
+    const DOC = 'https://docs.google.com/document/d/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUv/edit';
+
+    it('accepts a single file either way', () => {
+      expect(parse(photo, FILE).success).toBe(true);
+      expect(parse(attachment, FILE).success).toBe(true);
+    });
+
+    it('rejects a folder for a photo — "max 3 photos" is not a rule if one link can be forty', () => {
+      expect(parse(photo, FOLDER).success).toBe(false);
+      expect(parse(photo, `${FOLDER}?usp=sharing`).success).toBe(false);
+      // The `/u/0/` shape a signed-in Drive session emits is still a folder.
+      expect(parse(photo, 'https://drive.google.com/drive/u/0/folders/1iQDE08YnBsOQw2YbCQsNEAgJvxt8trsu').success).toBe(false);
+    });
+
+    it('rejects a Doc, Sheet, Slide or Form for a photo', () => {
+      expect(parse(photo, DOC).success).toBe(false);
+      expect(parse(photo, 'https://docs.google.com/spreadsheets/d/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUv/edit').success).toBe(false);
+    });
+
+    it('still allows a folder or a Doc as an attachment — the default must not change meaning', () => {
+      // An existing attachment field points at submissions already made against
+      // it; narrowing the default would retroactively invalidate them.
+      expect(parse(attachment, FOLDER).success).toBe(true);
+      expect(parse(attachment, DOC).success).toBe(true);
+    });
+
+    it('explains what to do instead rather than only refusing', () => {
+      const result = parse(photo, FOLDER);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toMatch(/folder/i);
+        expect(result.error.issues[0].message).toMatch(/Copy link/i);
+      }
+    });
+  });
+
   describe('ranking', () => {
     const rankingField = field({
       type: 'ranking',

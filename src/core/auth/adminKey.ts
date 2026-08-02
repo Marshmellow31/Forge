@@ -11,7 +11,7 @@
  * click from the console. It does not make the panel safe against someone who
  * wants in.
  *
- * That is not a compromise this file can fix. CLAUDE.md hard rule 3 — the
+ * That is not a compromise this file can fix. AGENT.md hard rule 3 — the
  * client is never the authority — is why it does not have to: *every action*
  * the panel offers is a Firestore write, and Firestore evaluates
  * `firestore.rules` against the caller's stored membership, not against

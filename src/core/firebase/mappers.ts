@@ -2,6 +2,7 @@ import type { Timestamp } from 'firebase/firestore';
 import type {
   Org, Workspace, Challenge, Registration, Submission, LeaderboardEntry,
   Criterion, Member, CurrentUser, Badge, Certificate, AuditEntry, FormSchema,
+  ParticipantEntry,
 } from '@shared/types/domain';
 import type {
   OrgDoc, WorkspaceDoc, ChallengeDoc, RegistrationDoc, SubmissionDoc,
@@ -91,6 +92,30 @@ export const toRegistration = (d: RegistrationDoc): Registration => ({
   status:
     d.status === 'withdrawn' || d.status === 'disqualified' ? 'eliminated' : d.status,
   currentStageKey: d.currentStageKey,
+  registeredAt: day(d.createdAt),
+  checkedIn: d.checkedInAt !== null,
+  answers: d.answers,
+});
+
+/**
+ * The same document, without the kindness.
+ *
+ * `toRegistration` folds `withdrawn` and `disqualified` into `eliminated`; this
+ * one keeps them, because the admin console is where they are set. The
+ * challenge title is not on the registration document, so the caller supplies
+ * it from the challenge it was read under.
+ */
+export const toParticipantEntry = (d: RegistrationDoc, challengeTitle: string): ParticipantEntry => ({
+  id: d.id,
+  challengeId: d.challengeId,
+  challengeTitle,
+  userId: d.userId,
+  name: d.name,
+  email: d.email,
+  avatarColor: d.avatarColor,
+  status: d.status,
+  currentStageKey: d.currentStageKey,
+  teamName: d.team?.name ?? null,
   registeredAt: day(d.createdAt),
   checkedIn: d.checkedInAt !== null,
   answers: d.answers,

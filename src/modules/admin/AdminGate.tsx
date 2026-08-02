@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Box, Button, CircularProgress, IconButton, InputAdornment, Stack, TextField, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { Blobs } from '@shared/ui/primitives';
-import { useAuth } from '@core/auth';
+import { useAuth, usePermissions } from '@core/auth';
 import { c, radius, ease } from '@shared/design/tokens';
 
 /**
@@ -29,6 +29,7 @@ import { c, radius, ease } from '@shared/design/tokens';
  */
 export function AdminGate({ children }: { children: ReactNode }) {
   const { user, ready, adminUnlocked, unlockAdmin, error, clearMessages } = useAuth();
+  const { isMember, ready: permsReady } = usePermissions();
   const location = useLocation();
   const [key, setKey] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -68,6 +69,28 @@ export function AdminGate({ children }: { children: ReactNode }) {
           startIcon={<Icon name="login" size={20} />}
         >
           Sign in
+        </Button>
+      </Frame>
+    );
+  }
+
+  // Defence in depth (ADR-027). The key is in the bundle, so on its own it
+  // gates nothing against someone who looked. Requiring membership as well
+  // means forcing the key gets you this screen rather than the console — and
+  // the console is where an admin's own email address and the roster are on
+  // display. The *writes* were always safe; what was leaking was the reading.
+  //
+  // `permsReady` first: refusing during the moment permissions resolve would
+  // bounce a real admin out of their own panel on every load.
+  if (adminUnlocked && permsReady && !isMember) {
+    return (
+      <Frame
+        icon="person_off"
+        title="Not a member of this organization"
+        body="The key is right, but the console shows an organization's people and entries and you do not belong to this one. Ask an owner for an invitation — the database refuses these reads regardless of what this screen does."
+      >
+        <Button variant="outlined" component={Link} to="/home" sx={{ height: 48 }}>
+          Back to Forge
         </Button>
       </Frame>
     );

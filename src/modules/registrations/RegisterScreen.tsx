@@ -8,8 +8,10 @@ import { Icon } from '@shared/ui/Icon';
 import { useChallengeBySlug, useFormSchemas } from '@core/firebase/hooks';
 import { useSubmitRegistration } from '@core/firebase/mutations';
 import { useAuth } from '@core/auth';
+import { demoOrgId } from '@core/firebase/app';
 import { NotSignedInError } from '@core/sync';
 import { FormRenderer, useFormEngine } from '@shared/ui/forms/FormRenderer';
+import { UploadProvider } from '@shared/ui/forms/UploadContext';
 import { stripHiddenAnswers } from '@core/forms/conditions';
 import { EmptyState, Tag, ListSkeleton } from '@shared/ui/primitives';
 import { c, radius, mono } from '@shared/design/tokens';
@@ -82,14 +84,30 @@ export default function RegisterScreen() {
 
       <Stack direction="row" gap={1.75} sx={{ p: 2.25, borderRadius: `${radius.tile}px`, background: c.surfaceContainer, mb: 3 }}>
         <Icon name="code" size={22} color={c.primaryIcon} />
+        {/* Was written against the seeded monsoon form and named two of its
+            fields by hand — so it described a form that no longer exists the
+            moment the demo data went (ADR-025). Every entry form is a different
+            schema; the note has to be true of all of them. */}
         <Typography sx={{ fontSize: 13, lineHeight: 1.55, color: c.inkMuted }}>
-          Every field below is generated from stored JSON — nothing here is hardcoded. Choosing{' '}
-          <Box component="strong" sx={{ color: c.ink }}>“Not a student”</Box> or a non-phone camera reveals
-          conditional fields, and hidden answers are dropped before storage.
+          Every field below is generated from stored JSON — nothing here is hardcoded. Some fields
+          appear only once an earlier answer calls for them, and answers that end up hidden are
+          dropped before storage.
         </Typography>
       </Stack>
 
-      <FormRenderer schema={schema} engine={engine} />
+      {/* File fields upload into the organiser's Drive, and need to know
+          which challenge they are filing under and who is asking. The schema
+          cannot carry either — the same schema serves different challenges —
+          so it arrives as context. See shared/ui/forms/UploadContext.tsx. */}
+      <UploadProvider
+        value={{
+          orgId: demoOrgId(),
+          challengeId: challenge?.id ?? '',
+          getIdToken: () => (user ? user.getIdToken() : Promise.resolve(null)),
+        }}
+      >
+        <FormRenderer schema={schema} engine={engine} />
+      </UploadProvider>
 
       {error && (
         <Stack

@@ -61,7 +61,10 @@ const DOORS: Door[] = [
     mode: 'demo',
     icon: 'visibility',
     title: 'Just show me around',
-    body: 'Browse a fully seeded organization — six challenges, real entries, live judging — with no account and nothing to set up. Read-only.',
+    // Deliberately does not count the challenges. The seeded demo set was
+    // removed (ADR-025) and a number here is a promise the database has to keep
+    // — it was already wrong the moment the first one was published or deleted.
+    body: 'Browse the open challenges, the entries and the judging, with no account and nothing to set up. Read-only.',
     cta: 'Explore the demo',
     needsAccount: false,
     accent: c.surfaceContainer,

@@ -30,7 +30,7 @@ const EnvSchema = z.object({
    * env rather than in the source so a deployment can change it without a code
    * edit, and so it is one variable to rotate.
    */
-  VITE_ADMIN_SECRET: z.string().min(1).default('forge2026'),
+  VITE_ADMIN_SECRET: z.string().min(1).default('FORGE2026'),
 
   /** Point the SDK at a local emulator suite instead of production. */
   VITE_USE_EMULATOR: z

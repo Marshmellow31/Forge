@@ -3,8 +3,10 @@ import {
 } from 'react';
 import {
   onAuth, signInWithEmail, signUpWithEmail, sendPasswordReset, resendVerification,
-  signOut, type AuthUser,
+  signInWithGoogle, signInAsGuest, isGuest, signOut, type AuthUser,
 } from '@core/firebase/auth';
+import { useQueryClient } from '@tanstack/react-query';
+import { demoOrgId } from '@core/firebase/app';
 import { readMode, writeMode, clearMode, type AppMode } from './mode';
 import { clearUnlock, isUnlocked, recordUnlock, verifyAdminKey } from './adminKey';
 
@@ -38,9 +40,27 @@ export interface AuthValue {
   /** Resolves true on success. Callers navigate only when it does. */
   signInEmail: (email: string, password: string) => Promise<boolean>;
   signUpEmail: (email: string, password: string, displayName?: string) => Promise<boolean>;
+  signInGoogle: () => Promise<boolean>;
+  /** Anonymous session. Temporary scaffolding — see `core/firebase/auth.ts`. */
+  signInGuest: () => Promise<boolean>;
+  /**
+   * The admin door: email, password **and** the access key, in one step.
+   *
+   * It exists as one call rather than "sign in, then unlock" because the two
+   * halves have to be atomic from the screen's point of view — signing someone
+   * in and *then* refusing their key would leave them authenticated on a
+   * screen that says they failed, with no obvious way forward. The key is
+   * checked first, so a wrong key never touches Firebase at all.
+   *
+   * The unlock is recorded against the uid this call returns rather than the
+   * `user` in state, which has not landed yet when this resolves.
+   */
+  signInAdmin: (email: string, password: string, key: string) => Promise<boolean>;
   resetPassword: (email: string) => Promise<boolean>;
   resendVerificationEmail: () => Promise<boolean>;
   signOutNow: () => Promise<void>;
+  /** True for an anonymous session: no recovery, no invite, no organization. */
+  guest: boolean;
 
   /** Which surface to show. A view preference, never a permission. See mode.ts. */
   mode: AppMode | null;
@@ -72,9 +92,13 @@ const AuthContext = createContext<AuthValue>({
   clearMessages: noop,
   signInEmail: async () => false,
   signUpEmail: async () => false,
+  signInGoogle: async () => false,
+  signInGuest: async () => false,
+  signInAdmin: async () => false,
   resetPassword: async () => false,
   resendVerificationEmail: async () => false,
   signOutNow: async () => {},
+  guest: false,
   mode: null,
   setMode: noop,
   onboarded: false,
@@ -115,9 +139,27 @@ function explain(err: unknown): string | null {
     case 'auth/missing-password':
       return 'Enter your password.';
 
+    // --- Google popup ------------------------------------------------------
+    // Three distinct things, all of which arrive here as "the popup did not
+    // produce a credential". Closing it yourself is not an error worth a red
+    // box; a blocked popup is, and it is fixed somewhere the app cannot reach.
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+    case 'auth/user-cancelled':
+      return null;
+    case 'auth/popup-blocked':
+      return 'Your browser blocked the Google sign-in window. Allow popups for this site, or use email and password.';
+    case 'auth/account-exists-with-different-credential':
+      return 'An account already exists with that email, created a different way. Sign in with your password instead.';
+
     // --- Project configuration ---------------------------------------------
+    // `admin-restricted-operation` is what anonymous sign-in returns when the
+    // provider is switched off, and the wording ("restricted") suggests a
+    // permissions problem in the app rather than a toggle in the console.
+    case 'auth/admin-restricted-operation':
+      return 'Guest sign-in is not enabled on this Firebase project. Turn on the Anonymous provider under Firebase console → Authentication → Sign-in method, or sign in with an email address.';
     case 'auth/operation-not-allowed':
-      return 'Email and password sign-in is not enabled on this Firebase project. Enable it under Firebase console → Authentication → Sign-in method → Email/Password.';
+      return 'That sign-in method is not enabled on this Firebase project. Enable it under Firebase console → Authentication → Sign-in method.';
     case 'auth/unauthorized-domain':
       return 'This domain is not authorized for sign-in. Add it under Firebase console → Authentication → Settings → Authorized domains.';
     // The raw code reads as a client bug and sends people looking through their
@@ -150,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [mode, setModeState] = useState<AppMode | null>(() => readMode());
   const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const qc = useQueryClient();
 
   useEffect(() => {
     try {
@@ -182,6 +225,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setNotice(null);
       try {
         await fn();
+        /**
+         * Drop the cached identity so the app re-reads who this person is.
+         *
+         * Sign-in *provisions* — it creates `users/{uid}` and redeems any
+         * pending invite (ADR-020) — and that happens after the query cache has
+         * already answered "no membership" for the account that was signed in
+         * a moment ago. Without this, a brand-new admin signs in, is granted
+         * `owner` in the database, and is told by the panel that they are not a
+         * member of the organization until they reload the page by hand.
+         *
+         * A prefix key, so it covers every member document rather than needing
+         * the uid that provisioning may have only just created.
+         */
+        await qc.invalidateQueries({ queryKey: ['org', demoOrgId(), 'member'] });
+        await qc.invalidateQueries({ queryKey: ['user'] });
         if (success) setNotice(success);
         return true;
       } catch (err) {
@@ -203,6 +261,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInEmail: (email, password) => run(() => signInWithEmail(email, password)),
       signUpEmail: (email, password, displayName) =>
         run(() => signUpWithEmail(email, password, displayName)),
+      signInGoogle: () => run(signInWithGoogle),
+      signInGuest: () => run(signInAsGuest),
+
+      signInAdmin: async (email, password, key) => {
+        // The key first, and without a network call: a wrong key is the most
+        // likely mistake at this door, and it is not worth a round trip or a
+        // rate-limit entry against the address.
+        if (!verifyAdminKey(key)) {
+          setError('That access key is not right.');
+          setNotice(null);
+          return false;
+        }
+        setBusy(true);
+        setError(null);
+        setNotice(null);
+        try {
+          const signedIn = await signInWithEmail(email, password);
+          // Bind the unlock to the uid we were just handed. Reading `user` from
+          // state here would read the *previous* identity — `onAuth` has not
+          // fired yet — and record an unlock against the wrong account.
+          recordUnlock(signedIn.uid);
+          setAdminUnlocked(true);
+          // Same reason as in `run`: this path does not go through it, and the
+          // admin door is precisely where a stale "not a member" is worst.
+          await qc.invalidateQueries({ queryKey: ['org', demoOrgId(), 'member'] });
+          await qc.invalidateQueries({ queryKey: ['user'] });
+          return true;
+        } catch (err) {
+          setError(explain(err));
+          return false;
+        } finally {
+          setBusy(false);
+        }
+      },
+
       // Worded as a conditional on purpose: Firebase succeeds for an unknown
       // address too, and saying "sent" would be a claim we cannot support.
       resetPassword: (email) =>
@@ -226,6 +319,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAdminUnlocked(false);
         });
       },
+
+      guest: isGuest(user),
 
       mode,
       setMode: (next: AppMode) => {
@@ -256,7 +351,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAdminUnlocked(false);
       },
     };
-  }, [user, ready, busy, error, notice, mode, adminUnlocked, clearMessages]);
+  }, [user, ready, busy, error, notice, mode, adminUnlocked, clearMessages, qc]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

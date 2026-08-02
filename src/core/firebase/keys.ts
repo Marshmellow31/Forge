@@ -44,4 +44,15 @@ export const qk = {
   /** Every registration this user holds, across challenges. */
   myRegistrations: (orgId: string, userId: string) =>
     ['org', orgId, 'myRegistrations', userId] as const,
+
+  /**
+   * Every registration in the organization — the admin console's roster.
+   *
+   * The challenge ids are part of the key because the query fans out over them:
+   * a challenge created or deleted changes the answer, and a key that ignored
+   * that would serve a roster missing a whole competition until something else
+   * happened to invalidate it.
+   */
+  allRegistrations: (orgId: string, challengeIds: string[]) =>
+    ['org', orgId, 'allRegistrations', [...challengeIds].sort().join(',')] as const,
 } as const;

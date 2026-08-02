@@ -107,23 +107,23 @@ describe('admin key', () => {
     vi.stubGlobal('window', { sessionStorage: fakeStorage() });
   });
 
-  it('defaults to forge2026 when VITE_ADMIN_SECRET is unset', async () => {
+  it('defaults to FORGE2026 when VITE_ADMIN_SECRET is unset', async () => {
     const { adminKey } = await import('./adminKey');
-    expect(adminKey()).toBe('forge2026');
+    expect(adminKey()).toBe('FORGE2026');
   });
 
   it('accepts the key and rejects everything else', async () => {
     const { verifyAdminKey } = await import('./adminKey');
-    expect(verifyAdminKey('forge2026')).toBe(true);
-    expect(verifyAdminKey('forge2025')).toBe(false);
-    expect(verifyAdminKey('Forge2026')).toBe(false); // case matters
-    expect(verifyAdminKey('forge2026 extra')).toBe(false);
+    expect(verifyAdminKey('FORGE2026')).toBe(true);
+    expect(verifyAdminKey('FORGE2025')).toBe(false);
+    expect(verifyAdminKey('forge2026')).toBe(false); // case matters
+    expect(verifyAdminKey('FORGE2026 extra')).toBe(false);
     expect(verifyAdminKey('')).toBe(false);
   });
 
   it('tolerates the whitespace a paste brings with it', async () => {
     const { verifyAdminKey } = await import('./adminKey');
-    expect(verifyAdminKey('  forge2026\n')).toBe(true);
+    expect(verifyAdminKey('  FORGE2026\n')).toBe(true);
   });
 
   it('is locked until an unlock is recorded', async () => {

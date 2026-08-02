@@ -48,6 +48,13 @@ interface Section {
 
 const SECTIONS: Section[] = [
   {
+    to: '/admin/participants',
+    icon: 'groups',
+    title: 'Participants',
+    body: 'Every entry in the organization. Search anyone, change their status, check them in, remove them.',
+    needs: 'registration.read',
+  },
+  {
     to: '/org/challenges',
     icon: 'emoji_events',
     title: 'Challenges',
@@ -175,6 +182,15 @@ export default function AdminPanel() {
             </Stack>
           </Tooltip>
           <Button
+            variant="contained"
+            component={Link}
+            to="/admin/participants"
+            sx={{ height: 44 }}
+            startIcon={<Icon name="groups" size={18} />}
+          >
+            Participants
+          </Button>
+          <Button
             variant="outlined"
             onClick={lockAdmin}
             sx={{ height: 44 }}
@@ -300,7 +316,12 @@ export default function AdminPanel() {
                 />
               </Box>
             ) : (
-              <>
+              // This panel sits in a grid column narrower than the columns add
+              // up to, so without a scroller the flexible title column collapses
+              // to nothing and the headers overlap each other. Fixed 300 + 4
+              // gaps × 16 + 48 padding = 412; 560 leaves the title 148px.
+              <Box sx={{ overflowX: 'auto' }}>
+                <Box sx={{ minWidth: 560 }}>
                 <TableHead
                   cols={[
                     { label: 'Challenge' },
@@ -341,7 +362,8 @@ export default function AdminPanel() {
                     </Box>
                   </Box>
                 ))}
-              </>
+                </Box>
+              </Box>
             )}
           </Box>
 

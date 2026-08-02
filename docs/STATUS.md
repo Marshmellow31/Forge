@@ -6,14 +6,13 @@
 
 ---
 
-**Last updated:** 2026-07-31
-**Updated by:** Agent (authentication rework + admin panel)
+**Last updated:** 2026-08-01
+**Updated by:** Agent (Google + guest sign-in restored, participant console, demo-data curation)
 **Current phase:** **Phases 0, 1 and 2 complete.** Phase 3 is blocked on Blaze, not effort
-**Repo state:** 17 screens on live Firestore (project forge-4d40a, org_demo seeded); the app now **writes**
+**Repo state:** 18 screens on live Firestore (project forge-4d40a, org_demo seeded); the app now **writes**
 **Build health:** typecheck clean · lint clean (0 errors, 0 warnings) ·
-**365 unit tests + 75 security-rules tests, all passing** · production build
-clean, service worker generated · **22 routes walked in a real browser with 0
-console errors** · no route renders `NotBuiltYet` any more
+**386 unit tests + 87 security-rules tests, all passing** · production build
+clean, service worker generated · no route renders `NotBuiltYet` any more
 **Rules + indexes are DEPLOYED to `forge-4d40a`** (2026-07-29) and reads were
 re-verified against them afterwards.
 
@@ -21,7 +20,71 @@ re-verified against them afterwards.
 
 ## 1. Where we are, in one paragraph
 
-**This session (2026-07-31)** replaced the sign-in story and gave the product an
+**This session (2026-08-01)** put the participant at the centre of the admin
+panel and reopened the front door (ADR-025). Google sign-in and a guest session
+are back beside email and password on `/signin`, split across a **member** door
+and an **admin** door — the admin door takes email, password and the access key
+(`FORGE2026`) in one step, and checks the key before it touches the network.
+`/admin/participants` is new and is the screen the panel was missing: every
+registration in the organization in one table, searchable, with status,
+check-in, membership and deletion controls, each disabled with its reason when
+the role does not carry it. `core/participants` holds the filtering and counting
+as pure functions with 16 tests. `scripts/curate.ts` removes the six seeded demo
+competitions and installs one real one (Milky Way photo contest, three photo
+slots, one required).
+
+**Verified end to end against the emulator suite**, not just typechecked: seed →
+curate → sign up → enter the competition → submit two real photo URLs → sign in
+through the admin door with `FORGE2026` → the entry appears in the console →
+check-in and a status change both write and read back. Two real bugs were found
+that way and fixed — the roster's flexible name column collapsed to zero width
+(the fixed columns summed past `minWidth`), and check-in from the console wrote
+to Firestore while invalidating only the control room's cache key, so the button
+appeared to do nothing while the database changed underneath it.
+
+**Note for the next agent: the emulator does run on this machine.** §Phase 0
+says `java` is 8, which is true of the one on `PATH` — but Android Studio ships
+JDK 21 at `C:\Program Files\Android\Android Studio\jbr`. Export `JAVA_HOME` at
+it and `firebase emulators:start` works. `npm run dev:emulator` points the app
+at it via `.env.emulator.local` (fake credentials, gitignored, production
+`.env.local` untouched).
+
+**Real file upload landed (ADR-026).** `core/storage/` exists at last — the
+layer hard rule 4 has described since the beginning — with a Google Drive
+provider, two Vercel serverless endpoints (`api/drive/*`), and a `FileUploadInput`
+that replaces the stub which fabricated a `FileRef` on click. Entrants now
+choose a photo from their device; it uploads into the organiser's Drive folder
+and the *server* sets the sharing permission, removing the step entrants forget.
+The Milky Way form is one `files` field with `maxFiles: 3`. **Not yet verified
+end to end** — it needs a Google OAuth client ID, `npm run drive:connect`, and
+`vercel dev` to serve the endpoints locally; the UI is verified, the round trip
+is not.
+
+**Security audit and hardening (ADR-027).** `org_demo` was world-readable —
+members, registrations, submissions, reviews, scores and the audit log — because
+`demoReadable` was still switched on after real entrants arrived. The rules file
+had predicted exactly this in a comment. Closed, with nine new rules tests that
+each name the data they protect. Also: the user directory no longer answers to
+any signed-in account, `demoWriter` (any account could write scores) is gone, a
+strict CSP + HSTS ship in `vercel.json`, `AdminGate` now requires membership as
+well as the key, and `api/`+`scripts/` are finally inside `tsconfig.json` — they
+had never been typechecked.
+
+The audit surfaced **two real sign-in bugs**, both silent: the first admin never
+received their role (the hardened `members` read was circular, and `claimInvite`
+swallows refusals by design), and a stale query cache told a freshly-provisioned
+admin they were not a member until they reloaded. Both fixed and re-verified end
+to end on the emulator: sign up → verify → admin door → invite redeemed →
+console loads, first try, no reload.
+
+**Two things still need a human** — see §Open Questions: the Anonymous provider
+is off in the Firebase console (guest sign-in reports exactly that, by design),
+and `npm run curate` against production needs a service account key, so the six
+demo competitions are still live in `org_demo`.
+
+### The session before
+
+**2026-07-31** replaced the sign-in story and gave the product an
 admin console. Google and anonymous sign-in are gone; email and password is the
 only method (ADR-024), which buys one credential shape, one recovery story and
 no per-domain OAuth setup, at the cost of owning password reset and verification
@@ -38,7 +101,7 @@ to someone who was, in fact, signed in and about to be redirected. It is
 best-effort now (`provisionQuietly`), which is what the module's own comments
 already argued for the two writes but not for the reads.
 
-### The story before this session
+### Earlier
 
 **The session before** turned a read-only demo into something with a spine. The three
 Phase 0 gaps that had been open since the beginning are closed: there is a test
@@ -218,7 +281,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked/br
 
 | # | Feature | State |
 |---|---|---|
-| 1.1 | Authentication | [x] **email + password only** (ADR-024) — sign in, sign up, reset, verify, `users/{uid}` bootstrap, invite redemption. Google and guest sign-in removed |
+| 1.1 | Authentication | [x] **Google + email/password + guest** (ADR-025) — member door and admin door, sign up, reset, verify, `users/{uid}` bootstrap, invite redemption. Guest needs the Anonymous provider switched on |
 | 1.2 | Organization creation | [x] **done** — S-12, creator becomes owner |
 | 1.3 | Member invite + roles | [x] **done** — invites + 7 built-in roles (ADR-020) |
 | 1.4 | Workspaces | [x] **done** — create, rename, delete (refused while non-empty) |
