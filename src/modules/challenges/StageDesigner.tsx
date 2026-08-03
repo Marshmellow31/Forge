@@ -17,7 +17,7 @@ import type { Stage } from '@shared/types/domain';
  * Every control here is data going into `core/workflow`. Nothing about the
  * *shape* of a competition is encoded in this file: the same four controls
  * express "one form, one winner" and "screening → two rounds → interview",
- * which is CLAUDE.md hard rule 1 in practice.
+ * which is AGENT.md hard rule 1 in practice.
  */
 
 const STAGE_TYPES: Array<{ value: StageType; label: string; hint: string }> = [

@@ -5,13 +5,14 @@ import {
 import { db } from './app';
 import { challengeDoc, inviteDoc, memberDoc, notificationDoc, notificationsCol, rubricCol, submissionDoc } from './paths';
 import { resolvedPermissionsFor, BUILT_IN_ROLE_LIST, isPermission } from '@core/rbac';
-import type { FormSchema, Stage } from '@shared/types/domain';
+import type { RoleDefinition } from '@core/rbac';
+import type { FormSchema, Stage, ParticipantStatus } from '@shared/types/domain';
 import type { NotificationDoc } from './types';
 
 /**
  * Firestore write primitives.
  *
- * Nothing calls these directly — they go through `core/sync`, per CLAUDE.md
+ * Nothing calls these directly — they go through `core/sync`, per AGENT.md
  * hard rule 10. Components never import this module.
  *
  * Every write here is **idempotent by construction**: the document id is
@@ -57,7 +58,7 @@ export async function writeRegistration(input: RegistrationInput) {
       currentStageKey: 'registration',
       formSchemaId: input.formSchemaId,
       // PINNED: this answer set is only ever valid against the version it was
-      // filled in against. CLAUDE.md hard rule 6.
+      // filled in against. AGENT.md hard rule 6.
       formSchemaVersion: input.formSchemaVersion,
       answers: input.answers,
       checkedInAt: null,
@@ -163,7 +164,7 @@ export async function writeReview(input: ReviewInput) {
 
 /**
  * Publishing edits a published schema, so it writes version n+1 as a NEW
- * document and leaves the old one untouched. CLAUDE.md hard rule 6: existing
+ * document and leaves the old one untouched. AGENT.md hard rule 6: existing
  * submissions keep pointing at the version they were made against.
  *
  * Requires `form.manage`; a demo viewer will be denied by the rules, which is
@@ -630,6 +631,127 @@ export async function undoCheckIn(orgId: string, challengeId: string, registrati
     { checkedInAt: null, updatedAt: serverTimestamp() },
     { merge: true },
   );
+}
+
+/* ================================================================== *
+ * Participant administration — ADR-025                                *
+ * ================================================================== */
+
+/**
+ * Moves one registration to a different status.
+ *
+ * `registration.manage` is what the rules require, and it is deliberately a
+ * different permission from `registration.checkIn`: the volunteer on the door
+ * marks people present, and cannot disqualify anyone. That separation only
+ * survives if this write stays a *status* write — it must never also carry a
+ * `checkedInAt`, or the narrow permission becomes reachable through the wide
+ * one's door.
+ *
+ * Idempotent: same document, same field, no counter to move.
+ */
+export async function writeRegistrationStatus(
+  orgId: string,
+  challengeId: string,
+  registrationId: string,
+  status: ParticipantStatus,
+) {
+  await updateDoc(
+    doc(db(), 'organizations', orgId, 'challenges', challengeId, 'registrations', registrationId),
+    { status, updatedAt: serverTimestamp() },
+  );
+}
+
+/**
+ * Moves one registration to a different stage of the workflow.
+ *
+ * The manual half of what the advance rules do automatically — for the case the
+ * rules cannot express, which SPEC_WORKFLOW_ENGINE expects there to be one of
+ * in every real competition.
+ */
+export async function writeRegistrationStage(
+  orgId: string,
+  challengeId: string,
+  registrationId: string,
+  stageKey: string,
+) {
+  await updateDoc(
+    doc(db(), 'organizations', orgId, 'challenges', challengeId, 'registrations', registrationId),
+    { currentStageKey: stageKey, updatedAt: serverTimestamp() },
+  );
+}
+
+/**
+ * Deletes a registration outright, and decrements the challenge's counter.
+ *
+ * Deletion is offered alongside `withdrawn` and `disqualified` rather than
+ * instead of them, and it is the *rare* one: a status keeps the record and the
+ * story, while this erases both. It is here for the entry that should never
+ * have existed — a duplicate, a test row, a person who asked to be forgotten —
+ * not for the entry that ended badly.
+ *
+ * The counter is decremented in the same breath because on the Spark plan there
+ * is no Function to own that number (ADR-019). A failure to decrement is
+ * swallowed: the registration is already gone, the count is recomputable, and
+ * reporting a failed deletion that in fact succeeded is the worse error.
+ */
+export async function deleteRegistration(
+  orgId: string,
+  challengeId: string,
+  registrationId: string,
+) {
+  await deleteDoc(
+    doc(db(), 'organizations', orgId, 'challenges', challengeId, 'registrations', registrationId),
+  );
+  try {
+    await updateDoc(challengeDoc(orgId, challengeId), {
+      'counters.registrations': increment(-1),
+      updatedAt: serverTimestamp(),
+    });
+  } catch {
+    /* see above — the deletion stands regardless */
+  }
+}
+
+/**
+ * Sets a member's roles and status — the privilege boundary itself.
+ *
+ * `resolvedPermissions` is recomputed here from the pure engine and written
+ * alongside `roleIds`, exactly as `writeInvite` does, because **that field is
+ * what `firestore.rules` reads**: `hasPerm` does one `get()` of the membership
+ * and tests the flattened list. Writing `roleIds` without it would grant a role
+ * the UI displays and the rules ignore — a permission that appears to work
+ * until the first write is denied.
+ *
+ * A suspended member resolves to no permissions at all (see `resolvePermissions`),
+ * so suspension does not need the roles stripped to take effect.
+ */
+export async function writeMemberAccess(
+  orgId: string,
+  memberId: string,
+  access: { roleIds: string[]; status: 'active' | 'invited' | 'suspended' },
+  roles: RoleDefinition[] = [],
+) {
+  await updateDoc(memberDoc(orgId, memberId), {
+    roleIds: access.roleIds,
+    resolvedPermissions: resolvedPermissionsFor(
+      { roleIds: access.roleIds, status: access.status },
+      roles,
+    ),
+    status: access.status,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Removes a membership.
+ *
+ * The account survives — this is "you are no longer part of this organization",
+ * not "you no longer exist". Their registrations stay where they are, because a
+ * competition's history is not the organizer's to rewrite by removing someone
+ * from the member list.
+ */
+export async function deleteMember(orgId: string, memberId: string) {
+  await deleteDoc(memberDoc(orgId, memberId));
 }
 
 /* ================================================================== *

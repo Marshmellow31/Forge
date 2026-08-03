@@ -7,7 +7,7 @@ file reads instead of twenty.
 
 ## 1. Session start (always, in this order)
 
-1. Read `CLAUDE.md` — it is auto-loaded; it is the router.
+1. Read `AGENT.md` — it is auto-loaded; it is the router.
 2. Read [STATUS.md](STATUS.md) — where things actually stand, what's next,
    what's blocked. **Never assume the repo is where you last left it.**
 3. Read *at most two* specs, chosen from the router table for your task.

@@ -70,7 +70,21 @@ export default defineConfig({
             options: {
               cacheName: 'google-fonts',
               expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
+              /**
+               * 200 only — **not** 0. Status 0 is an opaque response, which for
+               * a CORS-enabled origin like Google Fonts means the fetch did not
+               * succeed. Allowing it here combined with `CacheFirst` and a
+               * one-year expiry meant a single failed request — one flaky
+               * moment on a train — was cached as the answer and every icon in
+               * the product rendered as its ligature text (`search`, `home`,
+               * `check`) for that visitor, permanently, until they cleared site
+               * data. Observed while verifying the production headers.
+               *
+               * Both hosts send proper CORS headers, so a real success is
+               * always 200 and nothing legitimate is lost. Contrast the Drive
+               * thumbnails below, where opaque *is* the expected shape.
+               */
+              cacheableResponse: { statuses: [200] },
             },
           },
           {

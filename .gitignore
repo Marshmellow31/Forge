@@ -55,3 +55,11 @@ dev-dist
 # Cloud Functions build output and deps (functions/ is not deployed on Spark)
 functions/lib
 functions/node_modules
+
+# Every local env file, including mode-specific ones (.env.emulator.local).
+.env*.local
+
+# Local agent tooling. This branch renamed .claude/ to .agent/; the launch
+# config is recreated locally by whatever harness needs it and should not
+# come back into version control and undo that.
+/.claude/

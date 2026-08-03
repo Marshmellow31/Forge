@@ -6,7 +6,7 @@
  *
  * The React half (Input / Display / ConfigEditor) lives in
  * `modules/forms/fields/` so that `core/` stays free of React, per the
- * dependency rules in CLAUDE.md. Adding a field type means touching exactly
+ * dependency rules in AGENT.md. Adding a field type means touching exactly
  * two files — one here, one there — and no switch statement anywhere.
  *
  * See docs/SPEC_FORM_ENGINE.md §4
@@ -424,12 +424,30 @@ registerFieldType({
    * because `core/forms` is a pure engine that must not depend on another
    * feature module; the UI half uses the real parser. Kept deliberately loose
    * here — the component gives the precise diagnosis.
+   *
+   * `config.purpose: 'image'` narrows it to a single file. Without that, a
+   * folder link is accepted — which is right for an attachment ("here is my
+   * project folder") and wrong for a photograph, because a competition that
+   * asks for three photos and accepts one link to forty has no rule at all.
+   * The default stays permissive so existing attachment fields do not change
+   * meaning underneath their submissions.
    */
-  buildValidator: () =>
-    z.string().refine(
+  buildValidator: (f) => {
+    const base = z.string().refine(
       (v) => /(drive|docs)\.google\.com\/.*[A-Za-z0-9_-]{10,}/.test(v),
       'Paste a Google Drive share link (Share → Copy link)',
-    ),
+    );
+    if (f.config.purpose !== 'image') return base;
+    return base
+      .refine(
+        (v) => !/drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\//.test(v),
+        'That is a folder, not a photograph. Open the folder, click the photo you want, then Share → Copy link on that file.',
+      )
+      .refine(
+        (v) => !/docs\.google\.com\/(?:document|spreadsheets|presentation|forms)\//.test(v),
+        'That is a Google Doc, Sheet, Slide or Form, not a photograph.',
+      );
+  },
   toExportValue: (v) => String(v ?? ''),
 });
 

@@ -223,7 +223,7 @@ describe('registry integrity', () => {
       ['date', '2026-07-29'],
       ['rating', 4],
       ['url', 'https://example.com'],
-      ['githubRepo', 'https://github.com/anthropics/claude-code'],
+      ['githubRepo', 'https://github.com/anthropics/agent-code'],
       ['phone', '+91 99999 11111'],
       ['time', '14:30'],
       ['datetime', '2026-07-29T14:30'],
@@ -262,6 +262,50 @@ describe('registry integrity', () => {
       const result = def.buildValidator(field({ type, key: `k_${type}` })).safeParse(value);
       expect(result.success, `${type} accepted ${JSON.stringify(value)}`).toBe(false);
     }
+  });
+
+  describe('driveLink with config.purpose = "image"', () => {
+    const photo = field({ type: 'driveLink', key: 'photo', config: { purpose: 'image' } });
+    const attachment = field({ type: 'driveLink', key: 'attachment' });
+    const parse = (f: typeof photo, v: string) =>
+      getFieldType('driveLink').buildValidator(f).safeParse(v);
+
+    const FILE = 'https://drive.google.com/file/d/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUv/view';
+    const FOLDER = 'https://drive.google.com/drive/folders/1iQDE08YnBsOQw2YbCQsNEAgJvxt8trsu';
+    const DOC = 'https://docs.google.com/document/d/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUv/edit';
+
+    it('accepts a single file either way', () => {
+      expect(parse(photo, FILE).success).toBe(true);
+      expect(parse(attachment, FILE).success).toBe(true);
+    });
+
+    it('rejects a folder for a photo — "max 3 photos" is not a rule if one link can be forty', () => {
+      expect(parse(photo, FOLDER).success).toBe(false);
+      expect(parse(photo, `${FOLDER}?usp=sharing`).success).toBe(false);
+      // The `/u/0/` shape a signed-in Drive session emits is still a folder.
+      expect(parse(photo, 'https://drive.google.com/drive/u/0/folders/1iQDE08YnBsOQw2YbCQsNEAgJvxt8trsu').success).toBe(false);
+    });
+
+    it('rejects a Doc, Sheet, Slide or Form for a photo', () => {
+      expect(parse(photo, DOC).success).toBe(false);
+      expect(parse(photo, 'https://docs.google.com/spreadsheets/d/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUv/edit').success).toBe(false);
+    });
+
+    it('still allows a folder or a Doc as an attachment — the default must not change meaning', () => {
+      // An existing attachment field points at submissions already made against
+      // it; narrowing the default would retroactively invalidate them.
+      expect(parse(attachment, FOLDER).success).toBe(true);
+      expect(parse(attachment, DOC).success).toBe(true);
+    });
+
+    it('explains what to do instead rather than only refusing', () => {
+      const result = parse(photo, FOLDER);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toMatch(/folder/i);
+        expect(result.error.issues[0].message).toMatch(/Copy link/i);
+      }
+    });
   });
 
   describe('ranking', () => {
@@ -329,7 +373,7 @@ describe('registry integrity', () => {
 describe('schema versions are immutable once published', () => {
   const v1 = schemaOf([field({ key: 'title', required: true })], { id: 'sch_x_v1', version: 1, status: 'published' });
 
-  // v2 adds a required field. CLAUDE.md hard rule 6: an entry made against v1
+  // v2 adds a required field. AGENT.md hard rule 6: an entry made against v1
   // must keep validating against v1 forever.
   const v2: FormSchema = {
     ...v1,

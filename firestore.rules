@@ -2,7 +2,7 @@ rules_version = '2';
 
 // Firestore Security Rules — the enforcement layer.
 //
-// CLAUDE.md hard rule 3: the client is never the authority. Every client-side
+// AGENT.md hard rule 3: the client is never the authority. Every client-side
 // permission check in the UI is UX only; this file is what actually holds.
 //
 // Structure follows DATA_MODEL.md §6. Tenant isolation is structural: tenant
@@ -60,27 +60,33 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
 
-    // ---- Demo scaffolding (ADR-016) --------------------------------------
-    // The public demo is READ-ONLY seeded data in ONE named organization, and
-    // is world-readable: no sign-in, so 700 viewers do not mint 700 throwaway
-    // anonymous accounts, and the demo works before Auth is configured.
+    // ---- Public browsing (ADR-016, narrowed by ADR-027) ------------------
+    // A visitor with no account can browse a public competition. That is the
+    // whole of it now.
     //
-    // This is safe only because it is exactly this narrow:
-    //   * it names a single org id — every other tenant is untouched
-    //   * it appears ONLY in read rules, never in a write rule
-    //   * the data behind it is fixture data, seeded from src/mock/data.ts
+    // It used to be much more. `demoReadable` returned true for the entirety of
+    // `org_demo`, making every collection beneath it world-readable — members,
+    // registrations, submissions, reviews, scores and the audit log. ADR-016
+    // took that trade deliberately, to avoid 700 demo viewers minting 700
+    // throwaway anonymous accounts, and it was sound while the only thing in
+    // there was fixture data from `src/mock/data.ts`. The comment that lived
+    // here said, in as many words, to delete it before real customer data
+    // arrived. Real entrants arrived; nobody deleted it. Their names, email
+    // addresses and answers were readable by anyone who knew the project id.
     //
-    // Delete this function and its call sites before real customer data lives
-    // in any organization.
+    // What replaces it is scoped by what a signed-out visitor actually needs:
+    // the organization, its public challenges, the entry form, the rubric, the
+    // leaderboard. Every one of those is content an organiser published on
+    // purpose. Nothing here reaches a person's data.
+    //
+    // `demoWriter` is gone entirely rather than stubbed, so nothing reads as if
+    // it might come back. It let any signed-in account write reviews and scores
+    // in this org — score manipulation on a live competition, not convenience.
+    //
+    // Before adding a call site: the test suite has a block named after this
+    // ADR that spells out, per collection, what would be published.
     function isDemoOrg(orgId) { return orgId == 'org_demo'; }
-    function demoReadable(orgId) { return isDemoOrg(orgId); }
-
-    // Writes in the demo org are allowed ONLY for a signed-in user and ONLY on
-    // documents keyed to their own uid. That is what makes this safe without a
-    // membership: a viewer can register themselves and score as themselves,
-    // and cannot touch anyone else's row, the leaderboard, the audit log or
-    // any shared org state.
-    function demoWriter(orgId) { return isDemoOrg(orgId) && isSignedIn(); }
+    function publicBrowse(orgId) { return isDemoOrg(orgId); }
     // ----------------------------------------------------------------------
 
     // ---- Collection-group read: "my registrations" (ADR-018) --------------
@@ -103,7 +109,11 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isSignedIn();
+      // HARDENED (ADR-027): was `isSignedIn()`, which made the whole user
+      // directory — every display name and email address — readable by anyone
+      // who could create an account. One throwaway sign-up enumerated the
+      // platform. Your own document, or a profile its owner marked public.
+      allow read: if uid() == userId || resource.data.isPublic == true;
       // `stats` is denormalized and Function-written; a client may never touch it.
       allow create: if uid() == userId;
       allow update: if uid() == userId
@@ -137,13 +147,24 @@ service cloud.firestore {
     }
 
     match /organizations/{orgId} {
-      allow read: if isMember(orgId) || demoReadable(orgId) || resource.data.status == 'active';
+      allow read: if isMember(orgId) || publicBrowse(orgId) || resource.data.status == 'active';
       allow create: if isSignedIn() && request.resource.data.ownerId == uid();
       allow update: if hasPerm(orgId, 'org.update');
       allow delete: if false;
 
       match /members/{memberId} {
-        allow read: if isMember(orgId) || demoReadable(orgId);
+        // Names and email addresses — members of the org only (ADR-027).
+        //
+        // **Plus your own document, always, whether or not it exists.** That is
+        // not a loophole, it is the fixed point the whole permission system
+        // stands on: `usePermissions` resolves what you may do by reading your
+        // own membership, and `provision` checks for it before redeeming an
+        // invite. Gating that read on `isMember` is circular — you would have
+        // to already be a member to discover that you are one — and it silently
+        // broke invite redemption, which is the only way a first admin exists
+        // (ADR-020). A non-existent document read denies nothing away: it
+        // returns "not found", which is what the caller is asking.
+        allow read: if memberId == uid() || isMember(orgId);
 
         // Three ways in, and no others:
         //   1. an admin adds you;
@@ -215,7 +236,7 @@ service cloud.firestore {
       }
 
       match /workspaces/{wid} {
-        allow read: if isMember(orgId) || demoReadable(orgId);
+        allow read: if isMember(orgId) || publicBrowse(orgId);
         // These are three distinct permissions in the catalog (SPEC_RBAC §2).
         // An earlier version checked `workspace.manage`, which no role grants
         // and which therefore denied every write — a rule can be wrong by
@@ -227,19 +248,21 @@ service cloud.firestore {
       }
 
       match /roles/{roleId} {
-        allow read: if isMember(orgId) || demoReadable(orgId);
+        allow read: if isMember(orgId);
         allow write: if hasPerm(orgId, 'role.manage');
       }
 
       match /settings/{settingId} {
-        allow read: if isMember(orgId) || demoReadable(orgId);
+        allow read: if isMember(orgId);
         allow write: if hasPerm(orgId, 'org.update');
       }
 
       // Published schemas are immutable — an edit creates version n+1.
-      // CLAUDE.md hard rule 6.
+      // AGENT.md hard rule 6.
       match /formSchemas/{schemaId} {
-        allow read: if isMember(orgId) || demoReadable(orgId);
+        // The questionnaire, not the answers. A signed-out visitor has to read
+        // it to see what a competition asks before entering.
+        allow read: if isMember(orgId) || publicBrowse(orgId);
         allow create: if hasPerm(orgId, 'form.manage');
         allow update: if hasPerm(orgId, 'form.manage') && resource.data.status == 'draft';
         allow delete: if false;
@@ -248,24 +271,26 @@ service cloud.firestore {
       // Pre-joined read-optimization documents. Read-only to clients; written
       // only by the seed script via the Admin SDK, which bypasses rules.
       match /snapshots/{snapshotId} {
-        allow read: if isMember(orgId) || demoReadable(orgId);
+        // A snapshot embeds registrations and submissions wholesale, so it is
+        // exactly as sensitive as the most sensitive thing inside it (ADR-027).
+        allow read: if isMember(orgId);
         allow write: if false;
       }
 
       match /badges/{badgeId} {
-        allow read: if isMember(orgId) || demoReadable(orgId);
+        allow read: if isMember(orgId) || publicBrowse(orgId);
         allow write: if hasPerm(orgId, 'reward.manage');
       }
 
       match /auditLogs/{logId} {
-        allow read: if hasPerm(orgId, 'audit.read') || demoReadable(orgId);
+        allow read: if hasPerm(orgId, 'audit.read');
         allow create: if isMember(orgId);
         allow update, delete: if false;         // write-once
       }
 
       match /challenges/{cid} {
         allow read: if isMember(orgId)
-                    || demoReadable(orgId)
+                    || publicBrowse(orgId)
                     || resource.data.visibility == 'public';
         allow create: if hasPerm(orgId, 'challenge.create');
 
@@ -282,15 +307,37 @@ service cloud.firestore {
         // The residual risk — a member inflating a count — is visible, bounded
         // to their own org, and recomputable from the registrations themselves.
         // Recorded as ADR-019; it reverts to a Function the day billing is on.
+        //
+        // NARROWED (ADR-028). The counter hatch used to read
+        // `isSignedIn() && onlyChanges([...])`, which let *any* account with a
+        // session move the counters on *any* challenge in *any* organization —
+        // including tenants it had no relationship with at all. The bound was
+        // "only two fields", which is a bound on the blast radius per write and
+        // not on who may write.
+        //
+        // Adding "and you have a registration in this challenge" costs one
+        // `exists()` and removes the cross-tenant reach entirely: the only
+        // people who can touch a challenge's counters are people who entered
+        // it, which is exactly the population that legitimately needs to
+        // (registering is what moves the number, and on Spark there is no
+        // Function to own it — ADR-019).
+        //
+        // The residual risk is unchanged in kind and much smaller in scope: an
+        // entrant can inflate the count on a competition they entered. Visible,
+        // bounded, and recomputable from the registrations themselves.
         allow update: if hasPerm(orgId, 'challenge.update')
-                      || (isSignedIn() && onlyChanges(['counters', 'updatedAt']));
+                      || (isSignedIn()
+                          && onlyChanges(['counters', 'updatedAt'])
+                          && exists(/databases/$(database)/documents/organizations/$(orgId)/challenges/$(cid)/registrations/$(uid())));
 
         allow delete: if hasPerm(orgId, 'challenge.delete');
 
         // registrationId == userId in individual mode, so "one entry per user"
         // is enforced by the path and needs no query.
         match /registrations/{rid} {
-          allow read:   if rid == uid() || hasPerm(orgId, 'registration.read') || demoReadable(orgId);
+          // Your own, or someone who may read the roster. Never public: a
+          // registration carries a name, an email address and the answers.
+          allow read:   if rid == uid() || hasPerm(orgId, 'registration.read');
           allow create: if rid == uid() && request.resource.data.userId == uid();
           // Three update paths:
           //   1. you may edit your own registration while it is still pending;
@@ -312,8 +359,7 @@ service cloud.firestore {
 
         match /submissions/{sid} {
           allow read:   if resource.data.userId == uid()
-                        || hasPerm(orgId, 'submission.read')
-                        || demoReadable(orgId);
+                        || hasPerm(orgId, 'submission.read');
           allow create: if request.resource.data.userId == uid();
           // Once submitted it is frozen; only a draft is editable by its owner.
           allow update: if resource.data.userId == uid() && resource.data.status == 'draft';
@@ -321,26 +367,26 @@ service cloud.firestore {
         }
 
         match /reviews/{reviewId} {
-          allow read: if hasPerm(orgId, 'review.read') || demoReadable(orgId);
+          allow read: if hasPerm(orgId, 'review.read');
           // The document id encodes the judge, so a viewer can only ever write
           // their own review and can never overwrite another judge's.
           allow create, update: if request.resource.data.judgeId == uid()
                                 && reviewId == request.resource.data.submissionId + '_' + uid()
-                                && (hasPerm(orgId, 'review.write') || demoWriter(orgId));
+                                && hasPerm(orgId, 'review.write');
           allow delete: if false;
         }
 
         match /rubric/{criterionId} {
-          allow read: if isMember(orgId) || demoReadable(orgId)
+          allow read: if isMember(orgId) || publicBrowse(orgId)
                       || get(/databases/$(database)/documents/organizations/$(orgId)/challenges/$(cid)).data.visibility == 'public';
           allow write: if hasPerm(orgId, 'challenge.update');
         }
 
         // Append-only ledger — never overwrite a score. ADR-009.
         match /scores/{scoreId} {
-          allow read: if hasPerm(orgId, 'score.read') || demoReadable(orgId);
+          allow read: if hasPerm(orgId, 'score.read');
           allow create: if request.resource.data.judgeId == uid()
-                        && (hasPerm(orgId, 'score.write') || demoWriter(orgId));
+                        && hasPerm(orgId, 'score.write');
           // Append-only. Never overwrite a score; write a new event. ADR-009.
           allow update, delete: if false;
         }
@@ -349,7 +395,7 @@ service cloud.firestore {
         // reads every review in the challenge, which is 1,500 documents per
         // viewer at 500 entrants × 3 judges.
         match /leaderboard/{pageId} {
-          allow read: if isMember(orgId) || demoReadable(orgId)
+          allow read: if isMember(orgId) || publicBrowse(orgId)
                       || get(/databases/$(database)/documents/organizations/$(orgId)/challenges/$(cid)).data.visibility == 'public';
           // Written once, by result publishing, by someone holding
           // `result.publish` (ADR-022). A Function owns this on Blaze; on Spark
@@ -376,7 +422,7 @@ service cloud.firestore {
         }
 
         match /announcements/{aid} {
-          allow read: if isMember(orgId) || demoReadable(orgId);
+          allow read: if isMember(orgId) || publicBrowse(orgId);
           allow write: if hasPerm(orgId, 'challenge.update');
         }
       }

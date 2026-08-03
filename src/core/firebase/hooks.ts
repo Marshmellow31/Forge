@@ -128,6 +128,29 @@ export const useMyRegistrations = (userId: string | undefined, orgId = demoOrgId
   });
 
 /**
+ * The whole participant roster, for the admin console.
+ *
+ * Reads the challenge list first because the fan-out needs the ids and the rows
+ * need the titles — and because that list is already cached on every screen
+ * that would ask for this, so it usually costs nothing extra.
+ */
+export const useAllRegistrations = (orgId = demoOrgId()) => {
+  const { data: challenges = [], isLoading: challengesLoading } = useChallenges(orgId);
+  const lite = challenges.map((ch) => ({ id: ch.id, title: ch.title }));
+
+  const result = useQuery({
+    queryKey: qk.allRegistrations(orgId, lite.map((ch) => ch.id)),
+    queryFn: () => q.fetchAllRegistrations(orgId, lite),
+    // An organization with no challenges has no registrations, and firing the
+    // query anyway would resolve to `[]` while reporting a load that never
+    // happened.
+    enabled: !challengesLoading,
+  });
+
+  return { ...result, isLoading: challengesLoading || result.isLoading };
+};
+
+/**
  * Hydrates the four per-challenge collections from one pre-joined document.
  *
  * The control room alone costs ~44 document reads if registrations,

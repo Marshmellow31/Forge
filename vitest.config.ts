@@ -19,7 +19,14 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'tests/**/*.test.ts'],
+    //  holds the serverless handlers. Their tests live beside them and
+    // were outside this glob until ADR-028 — the ID-token verification in
+    // front of the upload endpoints had never been executed by anything.
+    include: [
+      'src/**/*.test.ts', 'src/**/*.test.tsx',
+      'api/**/*.test.ts',
+      'tests/**/*.test.ts',
+    ],
     // Rules tests need the emulator and a long fuse; they opt in by name.
     exclude: ['node_modules/**', 'dist/**', 'tests/rules/**'],
   },

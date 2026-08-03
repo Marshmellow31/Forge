@@ -1,0 +1,203 @@
+import { verifyIdToken, isRegisteredFor, AuthError } from '../_lib/auth';
+import {
+  driveConfig, accessToken, challengeFolder, createUploadSession, DriveError,
+} from '../_lib/drive';
+
+/**
+ * `POST /api/drive/upload-session` — mints a resumable upload session.
+ *
+ * The security boundary of the whole feature. Everything downstream of this is
+ * a single-use URL scoped to one file in one folder; everything upstream is a
+ * credential that can write to the organiser's Drive. This endpoint is what
+ * separates them, so it verifies before it does anything:
+ *
+ *   1. the caller holds a valid Firebase ID token for *this* project;
+ *   2. the file is within the size and type this deployment accepts;
+ *   3. they are not hammering it;
+ *   4. they are actually registered for the challenge they are uploading to.
+ *
+ * Without (1) it is an open relay that lets anyone on the internet fill a
+ * stranger's Google Drive.
+ *
+ * (4) was recorded as a known gap in ADR-026, on the belief that it needed the
+ * Admin SDK and a second long-lived credential. It does not — `isRegisteredFor`
+ * asks Firestore *as the caller*, over REST, with the ID token they already
+ * presented. See its comment in `../_lib/auth.ts`.
+ */
+
+/** 40 MB. A full-frame RAW conversion clears 25 MB and a phone JPEG is under 8. */
+const MAX_BYTES = Number(process.env.DRIVE_MAX_UPLOAD_BYTES ?? 40 * 1024 * 1024);
+
+/**
+ * Images only, by default. An upload endpoint that accepts anything is a
+ * hosting service with someone else paying for it — and the challenge that
+ * needs PDFs can widen this per deployment rather than everyone carrying it.
+ */
+const ALLOWED = (process.env.DRIVE_ALLOWED_MIME ?? 'image/jpeg,image/png,image/webp,image/heic,image/heif,image/tiff')
+  .split(',')
+  .map((v) => v.trim().toLowerCase())
+  .filter(Boolean);
+
+interface Req { method?: string; headers: Record<string, string | string[] | undefined>; body?: unknown }
+interface Res {
+  status(code: number): Res;
+  json(body: unknown): void;
+  setHeader(name: string, value: string): void;
+}
+
+const fail = (res: Res, status: number, error: string, message: string) =>
+  res.status(status).json({ error, message });
+
+/**
+ * A crude per-account rate limit: `RATE_MAX` sessions per `RATE_WINDOW_MS`.
+ *
+ * **Be honest about what this is.** The counter lives in one serverless
+ * instance's memory, and there are many instances, so a determined caller who
+ * spreads requests across them gets a multiple of this. It is a speed bump
+ * against a stuck retry loop or one bored person with a script — not a defence
+ * against a distributed attacker, and it is not the thing keeping the endpoint
+ * safe. That is the ID-token check plus the registration check above.
+ *
+ * Real rate limiting needs shared state (Redis, or Firestore with a write per
+ * request). Both are worth it when there is traffic to justify them; neither is
+ * worth it to protect a competition with forty entrants.
+ */
+const RATE_MAX = Number(process.env.DRIVE_RATE_MAX ?? 20);
+const RATE_WINDOW_MS = Number(process.env.DRIVE_RATE_WINDOW_MS ?? 60_000);
+const hits = new Map<string, number[]>();
+
+function takeToken(uid: string): boolean {
+  const now = Date.now();
+  const recent = (hits.get(uid) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
+  if (recent.length >= RATE_MAX) {
+    hits.set(uid, recent);
+    return false;
+  }
+  recent.push(now);
+  hits.set(uid, recent);
+
+  // Bound the map so a long-lived warm instance cannot grow one entry per
+  // account it has ever seen.
+  if (hits.size > 5_000) {
+    for (const [key, times] of hits) {
+      if (times.every((t) => now - t >= RATE_WINDOW_MS)) hits.delete(key);
+    }
+  }
+  return true;
+}
+
+/**
+ * A filename safe to store and to serve back.
+ *
+ * Removes path separators (`../` and friends), NUL and other control
+ * characters, and a leading dot. None of this protects Drive, which is not a
+ * filesystem we own — it protects everywhere the name is *later* echoed: a
+ * download header, an export CSV, a zip a judge unpacks locally.
+ */
+function safeName(input: string): string {
+  const cleaned = input
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f\x7f]/g, '')
+    .replace(/[/\\]/g, '-')
+    .replace(/^\.+/, '')
+    .trim();
+  return cleaned.length > 0 ? cleaned : 'upload';
+}
+
+export default async function handler(req: Req, res: Res) {
+  if (req.method !== 'POST') return fail(res, 405, 'unknown', 'Use POST.');
+
+  const projectId = process.env.VITE_FIREBASE_PROJECT_ID ?? process.env.FIREBASE_PROJECT_ID;
+  if (!projectId) {
+    return fail(res, 501, 'notConfigured', 'FIREBASE_PROJECT_ID is not set on the server.');
+  }
+
+  const config = driveConfig();
+  if ('missing' in config) {
+    return fail(
+      res, 501, 'notConfigured',
+      `Drive uploads are not configured. Missing: ${config.missing.join(', ')}. Run \`npm run drive:connect\`.`,
+    );
+  }
+
+  let caller;
+  try {
+    const header = req.headers.authorization;
+    caller = await verifyIdToken(Array.isArray(header) ? header[0] : header, projectId);
+  } catch (error) {
+    return fail(res, 401, 'notSignedIn', error instanceof AuthError ? error.message : 'Not signed in.');
+  }
+
+  const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as {
+    orgId?: string; challengeId?: string; name?: string; mimeType?: string; sizeBytes?: number;
+  } | null;
+
+  if (!body?.orgId || !body.challengeId || !body.name || !body.mimeType || !body.sizeBytes) {
+    return fail(res, 400, 'unknown', 'orgId, challengeId, name, mimeType and sizeBytes are required.');
+  }
+
+  if (body.sizeBytes > MAX_BYTES) {
+    return fail(
+      res, 413, 'tooLarge',
+      `That file is ${(body.sizeBytes / 1024 / 1024).toFixed(1)} MB. The limit here is ${(MAX_BYTES / 1024 / 1024).toFixed(0)} MB.`,
+    );
+  }
+
+  if (ALLOWED.length > 0 && !ALLOWED.includes(body.mimeType.toLowerCase())) {
+    return fail(
+      res, 415, 'unsupportedType',
+      `${body.mimeType} is not accepted. Allowed: ${ALLOWED.join(', ')}.`,
+    );
+  }
+
+  if (!takeToken(caller.uid)) {
+    return fail(
+      res, 429, 'rejected',
+      'Too many uploads from this account just now. Wait a minute and try again.',
+    );
+  }
+
+  const header = req.headers.authorization;
+  const registered = await isRegisteredFor(
+    Array.isArray(header) ? header[0] ?? '' : header ?? '',
+    projectId,
+    body.orgId,
+    body.challengeId,
+    caller.uid,
+  );
+  if (!registered) {
+    return fail(
+      res, 403, 'rejected',
+      'Enter this challenge before uploading to it. If you have just registered, reload and try again.',
+    );
+  }
+
+  try {
+    const token = await accessToken(config);
+    const folder = await challengeFolder(token, config.folderId, body.challengeId);
+    const uploadUrl = await createUploadSession(
+      config,
+      token,
+      // The stored name carries the uploader, because a folder of
+      // `IMG_4821.jpg` from forty entrants is not a record of anything.
+      {
+        // The filename is attacker-controlled and ends up on a filesystem and
+        // in a Content-Disposition. Strip path separators, control characters
+        // and leading dots rather than trusting the browser to have done it.
+        name: `${caller.uid.slice(0, 8)}-${safeName(body.name)}`.slice(0, 200),
+        mimeType: body.mimeType,
+        sizeBytes: body.sizeBytes,
+      },
+      folder,
+    );
+
+    return res.status(200).json({ uploadUrl, name: body.name });
+  } catch (error) {
+    if (error instanceof DriveError) {
+      const status = error.failure === 'quotaExceeded' ? 507
+        : error.failure === 'notConfigured' ? 501 : 502;
+      return fail(res, status, error.failure, error.message);
+    }
+    return fail(res, 500, 'unknown', (error as Error)?.message ?? 'Upload session failed.');
+  }
+}

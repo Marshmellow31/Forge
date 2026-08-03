@@ -103,7 +103,7 @@ ADR-019 and DEPLOY.md for exactly what that costs us), FCM push (in-app
 notifications only, by decision).
 
 **Look and feel:** the Forge design system — Material Design 3 expressive, warm
-amber — imported from a Claude Design project. Tokens in `src/shared/design/tokens.ts`,
+amber — imported from a Agent Design project. Tokens in `src/shared/design/tokens.ts`,
 theme in `src/app/theme.ts`, icons are Material Symbols Rounded. See ADR-015.
 
 ---

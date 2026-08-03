@@ -28,19 +28,36 @@ import { BUILT_IN_ROLE_LIST, resolvedPermissionsFor } from '../src/core/rbac';
 const ORG_ID = process.env.DEMO_ORG_ID ?? 'org_demo';
 /** Whoever signs in with this address redeems a pending owner invite. ADR-020. */
 const OWNER_EMAIL = process.env.OWNER_EMAIL ?? '';
-const KEY_PATH =
-  process.env.GOOGLE_APPLICATION_CREDENTIALS ?? resolve(process.cwd(), 'serviceAccountKey.json');
 
-if (!existsSync(KEY_PATH)) {
-  console.error(
-    `\n  Service account key not found at:\n    ${KEY_PATH}\n\n` +
-      '  Firebase console → Project settings → Service accounts → Generate new private key.\n' +
-      '  Save it as ./serviceAccountKey.json (gitignored) or set GOOGLE_APPLICATION_CREDENTIALS.\n',
-  );
-  process.exit(1);
+/**
+ * `npm run seed:emulator` points the Admin SDK at a local emulator, which needs
+ * no credential at all and cannot touch production. It is how the seed → curate
+ * → sign-up → enter → submit flow is rehearsed end to end before any of it is
+ * run against live data.
+ */
+if (process.argv.includes('--emulator')) {
+  process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:8080';
 }
 
-initializeApp({ credential: cert(JSON.parse(readFileSync(KEY_PATH, 'utf8'))) });
+if (process.env.FIRESTORE_EMULATOR_HOST) {
+  initializeApp({ projectId: process.env.GCLOUD_PROJECT ?? 'forge-4d40a' });
+  console.log(`Emulator mode — ${process.env.FIRESTORE_EMULATOR_HOST}\n`);
+} else {
+  const KEY_PATH =
+    process.env.GOOGLE_APPLICATION_CREDENTIALS ?? resolve(process.cwd(), 'serviceAccountKey.json');
+
+  if (!existsSync(KEY_PATH)) {
+    console.error(
+      `\n  Service account key not found at:\n    ${KEY_PATH}\n\n` +
+        '  Firebase console → Project settings → Service accounts → Generate new private key.\n' +
+        '  Save it as ./serviceAccountKey.json (gitignored) or set GOOGLE_APPLICATION_CREDENTIALS.\n\n' +
+        '  Or rehearse against the emulator first:  npm run seed:emulator\n',
+    );
+    process.exit(1);
+  }
+
+  initializeApp({ credential: cert(JSON.parse(readFileSync(KEY_PATH, 'utf8'))) });
+}
 const db: Firestore = getFirestore();
 
 /** `'2026-07-24'` or `'2026-07-24 14:10'` → Timestamp. */

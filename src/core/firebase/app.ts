@@ -8,7 +8,7 @@ import { env } from '@config/env';
 
 /**
  * The single Firebase entry point. Nothing outside `core/firebase/` may import
- * the Firebase SDK directly — see CLAUDE.md hard rule 4's sibling principle for
+ * the Firebase SDK directly — see AGENT.md hard rule 4's sibling principle for
  * storage, applied here to the data layer.
  */
 

@@ -11,14 +11,14 @@ import {
 import {
   toOrg, toWorkspace, toChallenge, toRegistration, toSubmission, toCriterion,
   toLeaderboard, toMember, toCurrentUser, toBadge, toCertificate, toAuditEntry,
-  toFormSchema, stamp,
+  toFormSchema, toParticipantEntry, stamp,
 } from './mappers';
 import type { FormSchema } from '@shared/types/domain';
 import type { MemberLike, RoleDefinition } from '@core/rbac';
 import type { RegistrationDoc } from './types';
 
 /**
- * Tenant-scoped reads. Every function takes `orgId` — CLAUDE.md hard rule 2.
+ * Tenant-scoped reads. Every function takes `orgId` — AGENT.md hard rule 2.
  *
  * These are plain async functions with no React in them; the hooks in
  * `@core/firebase/hooks` wrap them for TanStack Query.
@@ -53,6 +53,44 @@ export async function fetchChallengeBySlug(orgId: string, slug: string) {
 export async function fetchRegistrations(orgId: string, cid: string) {
   const snap = await getDocs(registrationsCol(orgId, cid));
   return snap.docs.map((d) => toRegistration(d.data()));
+}
+
+/**
+ * Every registration in the organization, across every challenge.
+ *
+ * **Why a fan-out and not a `collectionGroup`.** There is exactly one
+ * collection-group rule for registrations (ADR-018) and it admits a document
+ * only when `resource.data.userId == uid()` — "my registrations". A group query
+ * for *everyone's* would need a second root-level rule, and a root-level rule
+ * cannot see the `orgId` in the path, so it could not be scoped to one tenant.
+ * That is hard rule 2 refusing to be worked around, correctly. The nested rule
+ * already grants `registration.read` per challenge, so N reads it is.
+ *
+ * N is the number of challenges in one organization, which is tens, not
+ * thousands — and the caller already holds the challenge list for their titles.
+ * If it ever stops being tens, the answer is a server-side aggregate, not a
+ * looser rule.
+ *
+ * One challenge failing does not fail the rest: a challenge the caller cannot
+ * read contributes nothing instead of taking the whole console down with it.
+ */
+export async function fetchAllRegistrations(
+  orgId: string,
+  challenges: { id: string; title: string }[],
+) {
+  const perChallenge = await Promise.all(
+    challenges.map(async (ch) => {
+      try {
+        const snap = await getDocs(registrationsCol(orgId, ch.id));
+        return snap.docs.map((d) => toParticipantEntry(d.data(), ch.title));
+      } catch {
+        return [];
+      }
+    }),
+  );
+  // Newest first: an admin console is almost always opened because of something
+  // that just happened.
+  return perChallenge.flat().sort((a, b) => b.registeredAt.localeCompare(a.registeredAt));
 }
 
 export async function fetchSubmissions(orgId: string, cid: string) {
@@ -248,7 +286,7 @@ export async function fetchNotifications(orgId: string, userId: string) {
  *
  * `registrationId == userId` in individual mode, so this is a collection-group
  * query filtered by that id. The `orgId` filter keeps it tenant-scoped, which
- * CLAUDE.md hard rule 2 requires of a `collectionGroup` — see ADR-018.
+ * AGENT.md hard rule 2 requires of a `collectionGroup` — see ADR-018.
  */
 export async function fetchMyRegistrations(orgId: string, userId: string) {
   const snap = await getDocs(

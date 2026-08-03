@@ -208,7 +208,7 @@ consistency (publishing), and scheduled work (reminders, advancement).
 
 **Context.** SPEC_FORM_ENGINE §4 originally defined `FieldTypeDefinition` with
 `ConfigEditor`, `Input` and `Display` as React components living in
-`core/forms/`. CLAUDE.md hard rule 8 says `core/` contains no React. Both cannot
+`core/forms/`. AGENT.md hard rule 8 says `core/` contains no React. Both cannot
 be true. The contradiction surfaced the moment the registry was actually built.
 
 **Decision.** Split the registry across the layer boundary:
@@ -303,7 +303,7 @@ and form-control baseline.
 ## ADR-015 — One application shell, and design tokens are the single source of colour
 **Date:** 2026-07-29 · **Status:** Accepted
 
-**Context.** The Forge design system (Claude Design project "Material Design 3
+**Context.** The Forge design system (Agent Design project "Material Design 3
 SaaS UI", `Forge.dc.html`) was imported and implemented. It specifies a single
 shell — a persistent sidebar on desktop with two nav groups ("For you" and
 "Organizing"), a bottom navigation bar plus FAB on mobile — covering all twelve
@@ -343,7 +343,7 @@ future nav change.
 **Context.** The Vercel demo must show admin, judging and control-room screens to
 a visitor with no account, and must survive ~700 concurrent viewers. Those reads
 are gated behind org membership by [DATA_MODEL.md §6](DATA_MODEL.md), correctly —
-CLAUDE.md hard rule 3 says the client is never the authority.
+AGENT.md hard rule 3 says the client is never the authority.
 
 The first attempt used anonymous sign-in plus a self-issued read-only membership.
 Two things killed it: enabling Identity Platform programmatically requires
@@ -425,7 +425,7 @@ possible, and the Google Picker can sit on top of this without changing `FileRef
 
 **Context.** A participant's dashboard needs every registration they hold across
 challenges. Reading each challenge's `registrations` subcollection is N reads for
-N challenges. CLAUDE.md hard rule 2 requires a `collectionGroup` query to carry
+N challenges. AGENT.md hard rule 2 requires a `collectionGroup` query to carry
 an explicit security-rule justification recorded here.
 
 **Decision.** `fetchMyRegistrations` issues one `collectionGroup('registrations')`
@@ -526,7 +526,7 @@ equal the invite's exactly.
 **Date.** 2026-07-29 · **Status.** Accepted
 
 **Context.** Turning on `eslint-plugin-boundaries` (Phase 0 deliverable 0.2)
-surfaced **21 violations** of the dependency direction CLAUDE.md documents.
+surfaced **21 violations** of the dependency direction AGENT.md documents.
 Every one had the same two causes: `app/tokens.ts` and the `useAuth` context in
 `app/providers/AppProviders.tsx` are needed by every module and every shared
 primitive, so both were imported *upwards* from `modules/` into `app/`.
@@ -649,3 +649,394 @@ and the ADR-019 counter hatch stays bounded to two keys.
 * One test deliberately asserts the **presence** of the ADR-016 demo
   scaffolding. When it fails because the predicates are gone, delete the test —
   the failure is the reminder.
+
+---
+
+## ADR-024 — Email and password is the only sign-in method, and `/admin` sits behind a bundled key
+
+**Date.** 2026-07-31 · **Status.** Accepted
+
+**Context.** Sign-in was Google plus an anonymous guest handshake. Three
+problems, in increasing order of how much they cost:
+
+1. **Google sign-in is a deployment dependency, not just a code path.** It needs
+   an OAuth consent screen and an authorized-domain entry per host. The failure
+   mode is `auth/unauthorized-domain` on a fresh preview URL — an error that
+   reads as "you are not allowed" to the person seeing it and as a forgotten
+   console setting to everyone else.
+2. **Two credential shapes mean two recovery stories.** A Google account
+   recovers through Google; an anonymous one cannot recover at all. Every
+   account question — reset, verification, "I lost access" — had to be answered
+   twice, or answered once and be wrong half the time.
+3. **The guest handshake minted real accounts for people who wanted to look
+   around.** Browsing needs no identity at all, so the honest alternative to
+   signing in is *not signing in*, which the product already supports.
+
+Separately, there was no admin panel and no route that gathered the organizing
+surfaces into one place.
+
+**Decision.** Two parts.
+
+**Email and password only.** `core/firebase/auth.ts` exposes sign-in, sign-up,
+password reset and email verification, and nothing else. We own recovery, which
+is why reset and verification live in that module rather than being left to
+callers. Verification is load-bearing rather than decorative: ADR-020 grants
+every real permission through a redeemable invite, and `firestore.rules`
+requires `email_verified == true` to redeem one. Google accounts arrived
+verified; a password account does not, so sign-up sends the mail and the admin
+panel says so when it has not been acted on.
+
+**The admin panel is behind a key, and the key is a gate rather than a lock.**
+`/admin` requires a signed-in account plus `VITE_ADMIN_SECRET`, compared in the
+browser against a value that ships in the bundle. Anyone who opens devtools can
+read it. That is stated plainly in `core/auth/adminKey.ts`, in the gate's own
+UI, and in `.env.example`, because a gate that looks like a vault eventually has
+something put behind it that needed a real lock.
+
+It is nonetheless worth having, because hard rule 3 means it does not have to be
+the enforcement layer: every action the panel offers is a Firestore write
+evaluated against the caller's stored membership. Someone who forces the gate
+gets the chrome and `permission-denied` on everything they try. The key decides
+who is *shown* the console; the membership decides what works inside it.
+
+**Consequences.**
+
+* One credential shape, one recovery story, one place errors are explained
+  (`explain()` in `AuthContext`, which translates configuration failures into
+  the console setting that actually fixes them instead of the raw code).
+* No consent screen and no per-domain OAuth setup, so a new deploy host needs
+  one authorized-domain entry for Auth and nothing else.
+* We now carry password-reset and verification email delivery, and the
+  deliverability problems that come with them. `resendVerification` exists
+  because the first send can fail and must not strand the account.
+* The unlock is bound to a uid and stored in `sessionStorage`, so it ends with
+  the tab and does not survive a change of user on a shared machine.
+* **The upgrade path, when Blaze lands:** move the check behind a Cloud Function
+  that mints a custom claim, and gate the rules on the claim. `verifyAdminKey`
+  already compares in constant time so the comparison that moves server-side is
+  the right one rather than a `===` someone has to remember to replace.
+* Provisioning after sign-in is best-effort and cannot fail the session
+  (`provisionQuietly`). Firebase Auth has already issued the token by the time
+  Firestore is touched, so a `unavailable` on the user document is not a failed
+  sign-in and must not be reported as one.
+
+---
+
+## ADR-025 — Three doors in, one admin console, and the demo data is not the product
+
+**Date.** 2026-08-01 · **Status.** Accepted · **Amends** ADR-024
+
+**Context.** ADR-024 made email and password the only way in, and its reasoning
+about deployment cost still holds. What it got wrong was the audience: it
+optimized for *one* recovery story at the price of the sign-in a participant
+actually has. Google was enabled on the project the whole time, and turning it
+off did not remove the per-domain configuration it costs — it only removed the
+one-tap option from people who already had a Google account.
+
+Separately, the panel ADR-024 introduced could not do the thing an admin panel
+exists for. It aggregated and linked; it owned nothing. There was no screen
+anywhere in the product that started from *a person* — the control room manages
+a challenge, and a participant in three challenges appeared in three places and
+nowhere as themselves.
+
+And the organization was still full of the six fake competitions
+`scripts/seed.ts` writes from `src/mock/data.ts`. Demo scaffolding that outlives
+the demo stops being scaffolding and starts being wrong data.
+
+**Decision.** Three parts.
+
+**Three doors, and they are not equal.** `/signin` offers Google, email and
+password, and a guest session, on a *member* tab; an *admin* tab takes an email
+address, a password and the access key together. The admin door has no Google
+(the key must be typed by someone who knows it — one tap is the wrong ceremony),
+no sign-up (it is not where accounts are created) and no guest (an anonymous
+session has no name for the audit trail). `signInAdmin` checks the key **before**
+touching the network, so a wrong key costs no round trip and no rate-limit entry
+against the address, and the unlock is bound to the uid that call returns rather
+than to `user` in state, which has not landed yet.
+
+**Guest sign-in is scaffolding and is labelled as such.** It needs the Anonymous
+provider enabled in the console; without it the raw failure is
+`auth/admin-restricted-operation`, which reads as a permissions bug in the app
+rather than a toggle in the console, so `explain()` names the toggle. A guest
+cannot be granted a role (no verified email for `firestore.rules` to address an
+invite to), cannot own an organization and cannot recover the session. All three
+are stated on the button rather than discovered later.
+
+**The panel owns participants.** `/admin/participants` lists every registration
+in the organization — a fan-out over the challenge list, *not* a
+`collectionGroup`, because the only group rule for registrations admits
+`resource.data.userId == uid()` and a root-level rule cannot see the `orgId` in
+the path. That is hard rule 2 refusing to be worked around, and N reads over tens
+of challenges is the correct price. `ParticipantEntry` is a second domain type
+beside `Registration` for one reason: `Registration` folds `withdrawn` and
+`disqualified` into `eliminated`, which is right for the participant reading
+their own entry and useless for the administrator who sets them.
+
+**Consequences.**
+
+* `resolvedPermissions` is recomputed and written on every member-access change
+  (`writeMemberAccess`), exactly as `writeInvite` does. `hasPerm` in the rules
+  reads that field — writing `roleIds` alone would grant a role the UI shows and
+  the database ignores.
+* Check-in stays a separate control backed by `registration.checkIn`, and the
+  status write never carries `checkedInAt`. The volunteer on the door marks
+  people present and cannot disqualify anyone; that separation only survives if
+  the wide permission's write stays narrow.
+* Deleting a registration decrements `counters.registrations` best-effort, for
+  the same Spark-plan reason as ADR-019. The deletion stands if the counter
+  write fails; the count is recomputable and the row is not.
+* `scripts/curate.ts` removes the six demo challenges with their subcollections
+  and installs one real competition. It is reversible — `npm run seed` writes
+  the demo set back — and it recomputes `challengeCount` rather than
+  incrementing it, because the point of running it is that the old number is
+  wrong.
+* The Milky Way entry form asks for **three `driveLink` fields, one required**,
+  not one `files` field with `maxFiles: 3`. The `file`/`files` inputs in
+  `shared/ui/forms/fieldComponents.tsx` fabricate a placeholder `FileRef` — real
+  in-app upload is Phase 3 behind the Drive picker, and needs OAuth plus the
+  Drive API. A form that silently records a fake photograph is worse than one
+  that asks for a link.
+* **`driveLink` gained `config.purpose: 'image'`**, honoured by both halves of
+  the registry. Without it a folder link validates, and "up to three
+  photographs" is not a rule if one link can be forty. The default stays
+  permissive: an attachment field may legitimately point at a folder, and
+  narrowing it globally would retroactively invalidate submissions already made
+  against those fields.
+* `VITE_ADMIN_SECRET` defaults to `FORGE2026`. It ships in the bundle and
+  everything ADR-024 said about it being a gate and not a lock is unchanged.
+
+---
+
+## ADR-026 — Real uploads: files go into the organiser's Drive, via our own server
+
+**Date.** 2026-08-01 · **Status.** Accepted · **Amends** ADR-017, ADR-025
+
+**Context.** ADR-017 chose link-first storage and was right for the constraints
+it had: no Cloud Functions on Spark, no consent screen, no upload to fail at a
+deadline. But it left the entrant doing the work — upload to Drive, remember to
+set "Anyone with the link", paste the URL — and the step they forget is the
+sharing one, which produces an entry that looks submitted and shows the judges a
+blank frame.
+
+Worse, the `file` and `files` field types existed and *looked* implemented.
+Their inputs fabricated a `FileRef` on click. A form using them reported "entry
+received" while storing a photograph that was never anywhere. That is the most
+dangerous kind of stub and it had been in the tree for two phases.
+
+The alternative considered and rejected was the **Google Picker**: the entrant
+picks from their own Drive, the app sets the permission for them, no server at
+all. It is cheaper and keeps storage on the entrant. It was rejected because it
+requires every entrant to have a Google account, and a public photography
+competition cannot assume that.
+
+**Decision.** Files upload into the **organiser's** Drive folder, through two
+serverless endpoints of our own.
+
+**The credential is a refresh token, not a service account.** A service account
+is the obvious choice and does not work: service accounts have no Drive storage
+quota, so an upload into a folder shared with them fails `storageQuotaExceeded`
+— the account would own the file and has nowhere to put it. The documented fix
+is a Shared Drive, which needs Google Workspace; this project runs on consumer
+Gmail. So the app acts *as the folder's owner* with a refresh token granted once
+by `npm run drive:connect`, scoped to `drive.file` — per-file access limited to
+files this app creates, which is why the consent screen asks for nothing
+restricted and a leaked token is bounded to files we made.
+
+**Bytes never pass through our server.** `POST /api/drive/upload-session` mints
+a resumable session URL and the browser PUTs straight to Google. A serverless
+request body caps out around 4.5 MB and a photograph is routinely 10–40, so
+relaying would fail on exactly the files the feature exists for. It is also the
+safer shape: what the client receives is single-use and scoped to one file in
+one folder, and cannot be replayed to write anywhere else.
+
+**The server sets the sharing permission** (`POST /api/drive/finalize`). This is
+the point of the whole exercise — it removes the step entrants forget.
+
+**Consequences.**
+
+* **The organiser now underwrites storage.** Entries land on their 15 GB. This
+  reverses the cost position of ADR-017 and is the price of not requiring a
+  Google account. Worth a quota warning on the admin panel before a large
+  competition; not built yet.
+* `core/storage/` finally exists, which is what hard rule 4 has described since
+  the beginning. `providers/googleDrive.ts` is the only client file that knows
+  Drive is involved.
+* ID tokens are verified in `api/_lib/auth.ts` by hand against Google's public
+  certs rather than with `firebase-admin` — 10 MB of dependency for one RS256
+  check would dominate the cold start on the request a person is waiting on.
+* **Known gap:** the endpoint verifies the caller is a signed-in Forge user but
+  *not* that they are registered for the challenge. That needs a Firestore read,
+  which needs the Admin SDK and a second long-lived credential in the serverless
+  environment. The exposure is a signed-in user uploading to a challenge they
+  have not entered. The fix is an Admin SDK read of `registrations/{uid}` when
+  there is a reason to hold that key.
+* Size and MIME are enforced in three places — browser `accept`, the form
+  engine, and the endpoint. Only the third cannot be skipped.
+* The Milky Way form reverts to **one `files` field with `maxFiles: 3`**, which
+  is what "max three photos" always wanted to be. ADR-025's three `driveLink`
+  slots were a workaround for the stub, and `driveLink` remains the right field
+  for an entrant who would rather link something they already have in Drive.
+* **The seven-day trap:** while the OAuth consent screen is in "Testing" Google
+  expires refresh tokens after a week and uploads start failing `invalid_grant`.
+  Publishing the screen is required before relying on this; with only
+  `drive.file` requested it does not trigger Google's verification review.
+
+---
+
+## ADR-027 — Security hardening: the demo org stopped being a demo
+
+**Date.** 2026-08-01 · **Status.** Accepted · **Amends** ADR-016
+
+**Context.** A security review of the whole application, prompted by real
+entrants existing for the first time.
+
+The headline finding was written into `firestore.rules` a phase earlier, by
+whoever added the demo scaffolding:
+
+> *"Delete this function and its call sites before real customer data lives in
+> any organization."*
+
+`demoReadable(orgId)` returned true for the entirety of `org_demo`, making every
+collection beneath it world-readable with no sign-in: **members, registrations,
+submissions, reviews, scores and the audit log**. That was a defensible trade
+while the org held only fixture data from `src/mock/data.ts` — ADR-016 took it
+deliberately to avoid 700 throwaway anonymous accounts. It stopped being
+defensible the moment ADR-025/026 put a real competition in `org_demo`: a
+participant's name, email address and answers were readable by anybody who knew
+the project id.
+
+Nothing about this was exploited and nothing was written that should not have
+been — the *write* rules were always correct. What leaked was reading.
+
+**Decision.**
+
+* `demoReadable` is replaced by `publicBrowse`, which survives only on
+  collections a signed-out visitor needs and which hold no personal data: the
+  organization, public challenges, form schemas, rubric, leaderboard,
+  workspaces, badges, announcements.
+* `demoWriter` is gone. It let *any* signed-in account write reviews and scores
+  in `org_demo` — score manipulation on a live competition, not convenience.
+* `/users/{userId}` read was `isSignedIn()`: one throwaway sign-up enumerated
+  every display name and email address on the platform. Now your own document,
+  or a profile whose owner set `isPublic`.
+* A **strict CSP** ships in `vercel.json`, plus HSTS, `X-Frame-Options: DENY`
+  and `Cross-Origin-Opener-Policy: same-origin-allow-popups` (`same-origin`
+  would break `signInWithPopup`). The build emits no inline script, so
+  `script-src` needs no `unsafe-inline`; `style-src` does, because Emotion
+  injects at runtime and there is no hash to pin.
+* `AdminGate` additionally requires org membership. The key is in the bundle and
+  never gated anything against someone who looked; the *writes* were always
+  safe, but the console displays the roster, so seeing it should cost more than
+  reading a string out of devtools.
+* `api/` and `scripts/` are now in `tsconfig.json`. They were never typechecked
+  — "typecheck clean" had been claiming coverage it did not have.
+* Upload endpoint: the filename is sanitised (path separators, control
+  characters, leading dots) and the challenge id is validated against an
+  allow-list before being interpolated into a Drive query expression.
+
+**Two bugs this surfaced, both in the sign-in path.**
+
+1. **The first admin never got their role, silently.** Hardening `members` to
+   `isMember(orgId)` was circular: `provision` reads your own membership to
+   decide whether to redeem an invite, and `usePermissions` reads it to learn
+   what you may do — so requiring membership to read it means you can never
+   discover you have it. `claimInvite` swallows refusals by design (ADR-024), so
+   it failed with no error anywhere. The rule now allows reading **your own**
+   member document, present or absent.
+2. **A stale cache told a new admin they did not belong.** Sign-in provisions
+   *after* the query cache has already answered "no membership" for that
+   account. The database said `owner`; the panel said "not a member" until a
+   manual reload. Sign-in now invalidates the identity queries.
+
+**Consequences.**
+
+* One tenant-isolation assertion was deliberately relaxed and split in two,
+  rather than quietly flipped: a caller may read *their own* absent membership
+  in any org (the bootstrap depends on it), and may still read nothing else
+  there. The test names the reasoning.
+* **87 rules tests**, up from 75. The nine new ones each name the personal data
+  they protect, so anyone tempted to reopen the demo hatch has to read what
+  they would be publishing.
+* Still open, recorded rather than fixed: the ADR-019 counter hatch lets any
+  signed-in user move `counters` on any challenge; `api/drive/upload-session`
+  does not verify the caller is registered for the challenge (ADR-026); and
+  uploaded photos are shared `anyone/reader`, so a Drive link is a public URL
+  — correct for a photography competition, wrong for anything confidential.
+
+---
+
+## ADR-028 — Closing the gaps ADR-026 and ADR-027 recorded
+
+**Date.** 2026-08-01 · **Status.** Accepted · **Amends** ADR-019, ADR-026, ADR-027
+
+**Context.** ADR-026 and ADR-027 each ended with a list of things written down
+rather than fixed. Writing a risk down is only worth doing if the list is
+eventually worked; this is that pass.
+
+**Decisions.**
+
+**The upload endpoint checks registration after all.** ADR-026 said this needed
+the Admin SDK and a second long-lived credential in the serverless environment.
+It does not: Firestore's REST API accepts a **Firebase ID token**, so the server
+can ask the question *as the caller*, with the credential they already
+presented. `firestore.rules` allows `rid == uid()` on a registration, so a
+caller can read their own and nothing else — exactly the question being asked.
+No new secret exists and the check inherits the rules rather than restating
+them. It fails closed.
+
+**The ADR-019 counter hatch is narrowed.** It read `isSignedIn() &&
+onlyChanges(['counters','updatedAt'])`, which bounded what one write could do
+and said nothing about who could do it — any account with a session could
+rewrite the entrant count on any challenge in any tenant. It now also requires a
+registration in that challenge, which costs one `exists()` and removes the
+cross-tenant reach entirely. The residual risk is an entrant inflating a count
+on a competition they entered: visible, bounded, recomputable. Safe for the
+registration flow because `bumpCounter` runs *after* `writeRegistration`
+resolves, not in the same batch, so the document exists when the rule evaluates.
+
+**A per-account rate limit** on `upload-session`, and the code says plainly that
+it is a speed bump: the counter lives in one serverless instance's memory and
+there are many instances. It stops a stuck retry loop, not a distributed
+attacker. What keeps the endpoint safe is the token check and the registration
+check.
+
+**A Drive quota warning.** ADR-026 moved storage onto the organiser's own 15 GB
+and the failure mode is silent until it is urgent — uploads begin failing
+mid-competition and the first to notice is an entrant at a deadline.
+`GET /api/drive/quota` reports account-wide usage (Drive quota is account-wide,
+so a number scoped to our own files would be reassuring and useless) and the
+panel warns above 85%.
+
+**The `demoViewer` self-issued membership is deleted.** It could never succeed —
+the rules admit a member three ways and a self-issued role is none of them — so
+every call was a guaranteed denial caught by a `catch` that discarded it.
+
+**Tests for the code that had none.** `api/_lib/auth.ts` — the ID-token check in
+front of the upload endpoints — had never been executed by anything, because
+`api/**` was outside the vitest glob. It now has 18 tests covering `alg=none`,
+HS256 confusion, a token from another Firebase project, claims swapped under a
+valid signature, expiry, unknown key ids, and failing closed when Google's
+certificate endpoint is unreachable. `core/storage` has 17, concentrated on
+failure mapping.
+
+**Two bugs found while verifying, both real.**
+
+1. **A failed font fetch was cached for a year.** The PWA's `google-fonts`
+   runtime cache allowed `statuses: [0, 200]`. Status 0 is an opaque response,
+   which for a CORS-enabled origin like Google Fonts means the request did not
+   succeed — so one flaky moment cached a failure under `CacheFirst` with a
+   one-year expiry, and every icon in the product rendered as its ligature text
+   (`search`, `home`, `check`) for that visitor until they cleared site data.
+   Observed directly while verifying the production headers. Now `[200]` only.
+   The Drive-thumbnail rule keeps status 0, where opaque is the expected shape.
+2. **`scripts/serve-dist.mjs`** exists because that bug was only findable by
+   serving the real build with the real headers. `vite preview` sends none of
+   them, so the entire class of production-only header bug was invisible before
+   deploying. `NO_CSP=1` and `CSP="…"` are there for bisecting.
+
+**Consequence worth stating:** the CSP added in ADR-027 was verified against the
+production build — Material Symbols, Google Fonts, Firestore and the SPA all
+load clean under it. It was briefly suspected of breaking the icon font; it was
+not the cause, and the control test (same font, same browser, no CSP) is what
+established that rather than an assumption either way.

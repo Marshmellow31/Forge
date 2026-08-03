@@ -100,9 +100,29 @@ beforeEach(async () => {
  * ================================================================== */
 
 describe('tenant isolation', () => {
-  it('denies an org_a organizer reading org_b members', async () => {
+  it('denies an org_a organizer reading another person’s org_b membership', async () => {
+    // The assertion that matters: another tenant's people are not visible.
     const db = asUser('u_organizer');
-    await assertFails(getDoc(doc(db, 'organizations', OTHER_ORG, 'members', 'u_organizer')));
+    await assertFails(getDoc(doc(db, 'organizations', OTHER_ORG, 'members', 'u_owner')));
+  });
+
+  /**
+   * Deliberate, narrow relaxation — read the reasoning before tightening it.
+   *
+   * This case previously asserted denial, and passed only because the blanket
+   * `demoReadable`-era rule denied everything here. Allowing a caller to read
+   * *their own* membership document in any org is what `usePermissions` and
+   * `provision` both depend on (see the rule's comment), and it is load-bearing
+   * for invite redemption.
+   *
+   * What it discloses is bounded to the caller themselves: "am I a member of
+   * this org", for an org id they already had to know. No other person's data
+   * and no org's contents are reachable through it — the test above pins that.
+   */
+  it('lets an org_a organizer read their own (absent) org_b membership, and nothing else there', async () => {
+    const db = asUser('u_organizer');
+    await assertSucceeds(getDoc(doc(db, 'organizations', OTHER_ORG, 'members', 'u_organizer')));
+    await assertFails(getDoc(doc(db, 'organizations', OTHER_ORG, 'challenges', CHALLENGE, 'registrations', 'u_owner')));
   });
 
   it('denies an org_a organizer writing an org_b challenge', async () => {
@@ -159,12 +179,50 @@ describe('challenges', () => {
  * ================================================================== */
 
 describe('counters (ADR-019)', () => {
-  it('lets any signed-in user bump a counter', async () => {
+  /**
+   * NARROWED by ADR-028. This case asserted "any signed-in user", which was an
+   * accurate description of the rule and a bad property to have: an account
+   * with no relationship to a tenant could rewrite its entrant counts. The
+   * hatch now additionally requires a registration in the challenge, which is
+   * the population that legitimately moves the number.
+   *
+   * `u_member` is seeded without a registration, so it is now refused — and
+   * that refusal is the point of the change.
+   */
+  it('DENIES a signed-in user with no registration in the challenge', async () => {
+    const db = asUser('u_member');
+    await assertFails(updateDoc(doc(db, 'organizations', ORG, 'challenges', CHALLENGE), {
+      'counters.registrations': 1,
+      updatedAt: new Date(),
+    }));
+  });
+
+  it('lets an entrant bump a counter — registering is what the hatch exists for', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), 'organizations', ORG, 'challenges', CHALLENGE, 'registrations', 'u_member'),
+        { userId: 'u_member', status: 'pending' },
+      );
+    });
     const db = asUser('u_member');
     await assertSucceeds(updateDoc(doc(db, 'organizations', ORG, 'challenges', CHALLENGE), {
       'counters.registrations': 1,
       updatedAt: new Date(),
     }));
+  });
+
+  it('DENIES reaching across tenants even with a registration of your own', async () => {
+    // The registration is in org_a; the write targets org_b.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), 'organizations', ORG, 'challenges', CHALLENGE, 'registrations', 'u_member'),
+        { userId: 'u_member', status: 'pending' },
+      );
+    });
+    await assertFails(updateDoc(
+      doc(asUser('u_member'), 'organizations', OTHER_ORG, 'challenges', CHALLENGE),
+      { 'counters.registrations': 9999, updatedAt: new Date() },
+    ));
   });
 
   it('denies a signed-out visitor bumping a counter', async () => {
@@ -748,5 +806,150 @@ describe('Function-only collections', () => {
       await setDoc(doc(ctx.firestore(), 'users', 'u_member'), { email: 'a@b.c', stats: { points: 0 } });
     });
     await assertFails(updateDoc(doc(asUser('u_member'), 'users', 'u_member'), { stats: { points: 9999 } }));
+  });
+});
+
+/**
+ * ADR-027 — the demo-org PII leak, and that it stays closed.
+ *
+ * `demoReadable(orgId)` returned true for the whole of `org_demo`, so every
+ * collection under it was world-readable with no sign-in: members,
+ * registrations, submissions, reviews, scores and the audit log. That was
+ * defensible while the org held only fixture data, and the rules said so in a
+ * comment — "delete this before real customer data lives in any organization."
+ * Real entrants then registered in `org_demo` and nobody deleted it.
+ *
+ * These tests are the reason it cannot come back by accident. Each one names
+ * the personal data it is protecting, because a future reader weighing
+ * "can I just make this public again for the demo?" should have to read what
+ * they would be publishing.
+ */
+describe('ADR-027 — org_demo is not a public data set', () => {
+  const DEMO = 'org_demo';
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'organizations', DEMO), {
+        name: 'Demo', slug: 'demo', status: 'active', ownerId: 'u_owner',
+      });
+      await setDoc(doc(db, 'organizations', DEMO, 'challenges', CHALLENGE), {
+        orgId: DEMO, title: 'Milky Way', slug: 'milky-way', visibility: 'public',
+        status: 'running',
+        counters: { registrations: 1, submissions: 0, reviewsCompleted: 0, reviewsPending: 0 },
+      });
+      await setDoc(doc(db, 'organizations', DEMO, 'challenges', CHALLENGE, 'registrations', 'u_entrant'), {
+        userId: 'u_entrant', name: 'Ada Lovelace', email: 'ada@example.com',
+        status: 'active', answers: { photos: [] },
+      });
+      await setDoc(doc(db, 'organizations', DEMO, 'members', 'u_entrant'), {
+        userId: 'u_entrant', email: 'ada@example.com', displayName: 'Ada Lovelace',
+        roleIds: ['demoViewer'], resolvedPermissions: [], status: 'active',
+      });
+      await setDoc(doc(db, 'organizations', DEMO, 'auditLogs', 'a1'), {
+        actor: 'u_owner', action: 'published results', target: CHALLENGE,
+      });
+      await setDoc(doc(db, 'users', 'u_entrant'), {
+        email: 'ada@example.com', displayName: 'Ada Lovelace', isPublic: false,
+      });
+    });
+  });
+
+  const registration = (db: ReturnType<typeof asGuest>) =>
+    getDoc(doc(db, 'organizations', DEMO, 'challenges', CHALLENGE, 'registrations', 'u_entrant'));
+
+  it('DENIES an anonymous visitor reading a registration — name, email, answers', async () => {
+    await assertFails(registration(asGuest()));
+  });
+
+  it('DENIES a signed-in stranger reading someone else’s registration', async () => {
+    // A throwaway account is free to make. It must not be a key to the roster.
+    await assertFails(registration(asUser('u_random', 'random@example.com')));
+  });
+
+  it('DENIES an anonymous visitor reading the member list', async () => {
+    await assertFails(getDoc(doc(asGuest(), 'organizations', DEMO, 'members', 'u_entrant')));
+  });
+
+  it('DENIES an anonymous visitor reading the audit log', async () => {
+    await assertFails(getDoc(doc(asGuest(), 'organizations', DEMO, 'auditLogs', 'a1')));
+  });
+
+  it('DENIES a stranger reading another account’s user document', async () => {
+    // Was `allow read: if isSignedIn()` — one sign-up enumerated every email
+    // address on the platform.
+    await assertFails(getDoc(doc(asUser('u_random'), 'users', 'u_entrant')));
+  });
+
+  it('allows you to read your own user document', async () => {
+    await assertSucceeds(getDoc(doc(asUser('u_entrant'), 'users', 'u_entrant')));
+  });
+
+  it('DENIES any signed-in account writing a review in the demo org', async () => {
+    // `demoWriter` used to permit this. On a live competition that is not demo
+    // convenience, it is score manipulation.
+    await assertFails(setDoc(
+      doc(asUser('u_random'), 'organizations', DEMO, 'challenges', CHALLENGE, 'reviews', 's1_u_random'),
+      { judgeId: 'u_random', submissionId: 's1', score: 10 },
+    ));
+  });
+
+  it('still lets an anonymous visitor browse the public competition itself', async () => {
+    // The hardening must not close the front door: a public challenge and its
+    // entry form carry no personal data and a visitor needs both to decide
+    // whether to enter.
+    await assertSucceeds(getDoc(doc(asGuest(), 'organizations', DEMO, 'challenges', CHALLENGE)));
+    await assertSucceeds(getDoc(doc(asGuest(), 'organizations', DEMO)));
+  });
+
+  it('still lets an entrant read their own registration', async () => {
+    await assertSucceeds(registration(asUser('u_entrant', 'ada@example.com')));
+  });
+
+  /**
+   * Regression: hardening `members` to `isMember(orgId)` alone was circular.
+   *
+   * `usePermissions` learns what you may do by reading your own membership,
+   * and `provision` checks for it before redeeming an invite — so requiring
+   * membership to read it means you can never discover that you have it. It
+   * broke invite redemption, the only route to a first admin (ADR-020), and
+   * broke it *silently*, because `claimInvite` swallows refusals by design.
+   */
+  it('lets a stranger read their own (absent) membership — the bootstrap depends on it', async () => {
+    await assertSucceeds(getDoc(doc(asUser('u_newcomer'), 'organizations', DEMO, 'members', 'u_newcomer')));
+  });
+
+  /**
+   * ADR-028 — the counter hatch is no longer open to the whole internet.
+   *
+   * ADR-019 traded a Cloud Function for "any signed-in client may change
+   * `counters`", because registering has to move that number and on Spark
+   * nothing else can. The bound was two fields, which limits what one write can
+   * do and says nothing about who may do it — so any account with a session
+   * could rewrite the entrant count on any challenge in any tenant.
+   */
+  it('DENIES a signed-in stranger moving the counters on a challenge they never entered', async () => {
+    await assertFails(updateDoc(
+      doc(asUser('u_random'), 'organizations', DEMO, 'challenges', CHALLENGE),
+      { counters: { registrations: 99999, submissions: 0, reviewsCompleted: 0, reviewsPending: 0 } },
+    ));
+  });
+
+  it('still lets an entrant move them — registering is what the hatch is for', async () => {
+    await assertSucceeds(updateDoc(
+      doc(asUser('u_entrant', 'ada@example.com'), 'organizations', DEMO, 'challenges', CHALLENGE),
+      { counters: { registrations: 2, submissions: 0, reviewsCompleted: 0, reviewsPending: 0 } },
+    ));
+  });
+
+  it('DENIES an entrant using the hatch to change anything but the counters', async () => {
+    await assertFails(updateDoc(
+      doc(asUser('u_entrant', 'ada@example.com'), 'organizations', DEMO, 'challenges', CHALLENGE),
+      { title: 'Renamed by an entrant' },
+    ));
+  });
+
+  it('still denies reading somebody else’s membership', async () => {
+    await assertFails(getDoc(doc(asUser('u_newcomer'), 'organizations', DEMO, 'members', 'u_entrant')));
   });
 });

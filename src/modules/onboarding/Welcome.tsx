@@ -44,7 +44,7 @@ const DOORS: Door[] = [
     icon: 'emoji_events',
     title: 'I want to enter challenges',
     body: 'Register, submit your work, track deadlines and see your results. Your entries and certificates stay with your account.',
-    cta: 'Continue with Google',
+    cta: 'Sign in to continue',
     needsAccount: true,
     accent: c.primaryContainer,
   },
@@ -53,7 +53,7 @@ const DOORS: Door[] = [
     icon: 'workspaces',
     title: 'I want to run challenges',
     body: 'Create a competition, frame the questions and requirements, invite judges, score entries and publish results.',
-    cta: 'Continue with Google',
+    cta: 'Sign in to continue',
     needsAccount: true,
     accent: c.success,
   },
@@ -61,7 +61,10 @@ const DOORS: Door[] = [
     mode: 'demo',
     icon: 'visibility',
     title: 'Just show me around',
-    body: 'Browse a fully seeded organization — six challenges, real entries, live judging — with no account and nothing to set up. Read-only.',
+    // Deliberately does not count the challenges. The seeded demo set was
+    // removed (ADR-025) and a number here is a promise the database has to keep
+    // — it was already wrong the moment the first one was published or deleted.
+    body: 'Browse the open challenges, the entries and the judging, with no account and nothing to set up. Read-only.',
     cta: 'Explore the demo',
     needsAccount: false,
     accent: c.surfaceContainer,
@@ -70,18 +73,25 @@ const DOORS: Door[] = [
 
 export default function Welcome() {
   const nav = useNavigate();
-  const { user, signInGoogle, setMode, busy, error } = useAuth();
+  const { user, setMode, busy, error } = useAuth();
   const [pending, setPending] = useState<AppMode | null>(null);
 
-  const choose = async (door: Door) => {
+  const choose = (door: Door) => {
     setPending(door.mode);
     try {
+      // The surface is recorded *before* signing in, not after: it is what the
+      // door is actually choosing, and if someone abandons the sign-in form and
+      // comes back later, the answer they already gave should still hold.
+      setMode(door.mode);
+
       // Already signed in? Then the door is only a view preference and there is
       // no reason to make them authenticate again.
       if (door.needsAccount && !user) {
-        await signInGoogle();
+        // `next` carries them past sign-in to the surface they picked, so
+        // choosing a door is one decision rather than two.
+        nav(`/signin?next=${encodeURIComponent(HOME_FOR[door.mode])}`);
+        return;
       }
-      setMode(door.mode);
       nav(HOME_FOR[door.mode]);
     } finally {
       setPending(null);
@@ -156,7 +166,7 @@ export default function Welcome() {
               <Box
                 key={door.mode}
                 component="button"
-                onClick={() => void choose(door)}
+                onClick={() => choose(door)}
                 disabled={busy}
                 sx={{
                   textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit',

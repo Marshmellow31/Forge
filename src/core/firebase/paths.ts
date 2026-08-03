@@ -13,7 +13,7 @@ import type {
  * Typed Firestore references.
  *
  * **Every tenant-scoped helper takes `orgId` as its first argument.** That is
- * CLAUDE.md hard rule 2 made structural: there is no way to address a
+ * AGENT.md hard rule 2 made structural: there is no way to address a
  * collection of tenant data without naming the tenant, so a forgotten filter
  * cannot leak across orgs — the path itself cannot express it.
  *

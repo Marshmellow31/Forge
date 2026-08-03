@@ -1,7 +1,9 @@
 import * as writes from '@core/firebase/writes';
+import type { RoleDefinition } from '@core/rbac';
+import type { ParticipantStatus } from '@shared/types/domain';
 
 /**
- * The mutation entry point. CLAUDE.md hard rule 10: participant-facing writes
+ * The mutation entry point. AGENT.md hard rule 10: participant-facing writes
  * go through here, never `setDoc` from a component.
  *
  * **Offline durability is delegated to the Firestore SDK**, not to a bespoke
@@ -402,4 +404,56 @@ export async function claimInvite(
 ) {
   if (!user.email) return null;
   return writes.redeemInvite(orgId, { ...user, email: user.email });
+}
+
+export async function setMemberAccess(
+  orgId: string,
+  memberId: string,
+  access: { roleIds: string[]; status: 'active' | 'invited' | 'suspended' },
+  roles: RoleDefinition[],
+  userId: string | undefined,
+) {
+  requireUser(userId);
+  return writes.writeMemberAccess(orgId, memberId, access, roles);
+}
+
+export async function removeMember(orgId: string, memberId: string, userId: string | undefined) {
+  requireUser(userId);
+  return writes.deleteMember(orgId, memberId);
+}
+
+/* ================================================================== *
+ * Participant administration — ADR-025                                *
+ * ================================================================== */
+
+export async function setRegistrationStatus(
+  orgId: string,
+  challengeId: string,
+  registrationId: string,
+  status: ParticipantStatus,
+  userId: string | undefined,
+) {
+  requireUser(userId);
+  return writes.writeRegistrationStatus(orgId, challengeId, registrationId, status);
+}
+
+export async function setRegistrationStage(
+  orgId: string,
+  challengeId: string,
+  registrationId: string,
+  stageKey: string,
+  userId: string | undefined,
+) {
+  requireUser(userId);
+  return writes.writeRegistrationStage(orgId, challengeId, registrationId, stageKey);
+}
+
+export async function removeRegistration(
+  orgId: string,
+  challengeId: string,
+  registrationId: string,
+  userId: string | undefined,
+) {
+  requireUser(userId);
+  return writes.deleteRegistration(orgId, challengeId, registrationId);
 }

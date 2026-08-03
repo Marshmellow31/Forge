@@ -7,11 +7,12 @@
  */
 import {
   TextField, MenuItem, Checkbox, Rating,
-  Stack, Box, Typography, Chip, Button, IconButton, Select, OutlinedInput,
+  Stack, Box, Typography, Chip, IconButton, Select, OutlinedInput,
 } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
 import { DriveLinkInput } from '@shared/ui/DriveLinkInput';
 import { c as t, radius, ease } from '@shared/design/tokens';
+import { FileUploadInput } from './FileUploadInput';
 import type { FieldType, FormField, FileRef } from '@core/forms/types';
 
 /** Label + help/error pair shared by the non-text field types. */
@@ -48,6 +49,19 @@ export function getFieldInput(type: FieldType): InputComponent {
   const c = uiRegistry.get(type);
   if (!c) throw new Error(`No input component registered for field type: ${type}`);
   return c;
+}
+
+/**
+ * The `accept` attribute for a file field, from its own validation.
+ *
+ * Derived rather than hardcoded (hard rule 1): a challenge that wants PDFs says
+ * so in its schema. The browser filter is convenience only — the real limits
+ * are enforced by the upload endpoint, which is the half a determined caller
+ * cannot skip.
+ */
+function acceptFor(field: FormField): string {
+  const types = field.validation.acceptedMimeTypes;
+  return types && types.length > 0 ? types.join(',') : 'image/*';
 }
 
 /* ------------------------------------------------------------------ */
@@ -246,71 +260,18 @@ register('rating', (p) => (
   </Box>
 ));
 
-/** Simulated upload — the real one mints a Drive session server-side. See SPEC_STORAGE §3. */
-function fakeFile(name: string, mb: number): FileRef {
-  return {
-    provider: 'googleDrive',
-    fileId: `drv_${Math.random().toString(36).slice(2, 10)}`,
-    url: '#',
-    name,
-    mimeType: name.endsWith('.png') ? 'image/png' : 'image/jpeg',
-    sizeBytes: Math.round(mb * 1024 * 1024),
-    uploadedAt: new Date().toISOString(),
-    uploadedBy: 'u_self',
-  };
-}
-
-function FileChipRow({ file, onRemove }: { file: FileRef; onRemove: () => void }) {
-  return (
-    <Stack
-      direction="row"
-      alignItems="center"
-      gap={1.5}
-      sx={{ px: 2, py: 1.5, borderRadius: `${radius.field}px`, background: t.surfaceCard, border: `1px solid ${t.outline}` }}
-    >
-      <Icon name="draft" size={20} color={t.primaryIcon} />
-      <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography noWrap sx={{ fontSize: 14, fontWeight: 600 }}>{file.name}</Typography>
-        <Typography sx={{ fontSize: 12, color: t.inkFaint }}>
-          {(file.sizeBytes / 1024 / 1024).toFixed(1)} MB · Google Drive · {file.fileId}
-        </Typography>
-      </Box>
-      <Chip size="small" label="Uploaded" sx={{ background: t.success, color: t.onSuccess, height: 24 }} />
-      <IconButton size="small" onClick={onRemove} aria-label={`Remove ${file.name}`}>
-        <Icon name="close" size={18} />
-      </IconButton>
-    </Stack>
-  );
-}
-
 register('file', (p) => {
   const file = p.value as FileRef | null;
   return (
     <Box>
       <FieldLabel field={p.field} />
-      {file ? (
-        <FileChipRow file={file} onRemove={() => p.onChange(null)} />
-      ) : (
-        <Box
-          onClick={() => p.onChange(fakeFile('monsoon-first-light.jpg', 4.2))}
-          sx={{
-            cursor: 'pointer',
-            border: `2px dashed ${p.error ? t.errorInk : t.outlineStrong}`,
-            borderRadius: `${radius.tile}px`,
-            p: 4,
-            textAlign: 'center',
-            background: t.surfaceField,
-            transition: `background 180ms ${ease}, border-color 180ms ${ease}`,
-            '&:hover': { background: t.surfaceFieldHover },
-          }}
-        >
-          <Icon name="cloud_upload" size={36} color={t.primaryIcon} />
-          <Typography sx={{ fontSize: 15, fontWeight: 600, mt: 1.5, mb: 0.5 }}>Click to upload</Typography>
-          <Typography sx={{ fontSize: 13, color: t.inkMuted }}>
-            {p.field.validation.maxFileSizeMB ? `Max ${p.field.validation.maxFileSizeMB} MB` : 'Any file'} · goes to the org’s Drive
-          </Typography>
-        </Box>
-      )}
+      <FileUploadInput
+        files={file ? [file] : []}
+        onChange={(files) => p.onChange(files[0] ?? null)}
+        maxFiles={1}
+        accept={acceptFor(p.field)}
+        error={Boolean(p.error)}
+      />
       <FieldFoot error={p.error} help={p.field.help} />
     </Box>
   );
@@ -321,18 +282,13 @@ register('files', (p) => {
   return (
     <Box>
       <FieldLabel field={p.field} />
-      <Stack spacing={1}>
-        {files.map((f, i) => (
-          <FileChipRow key={f.fileId} file={f} onRemove={() => p.onChange(files.filter((_, j) => j !== i))} />
-        ))}
-        <Button
-          variant="outlined"
-          startIcon={<Icon name="cloud_upload" size={20} />}
-          onClick={() => p.onChange([...files, fakeFile(`asset-${files.length + 1}.png`, 1.8)])}
-        >
-          Add file
-        </Button>
-      </Stack>
+      <FileUploadInput
+        files={files}
+        onChange={p.onChange}
+        maxFiles={p.field.validation.maxFiles}
+        accept={acceptFor(p.field)}
+        error={Boolean(p.error)}
+      />
       <FieldFoot error={p.error} help={p.field.help} />
     </Box>
   );
@@ -559,10 +515,14 @@ register('driveLink', (p) => (
     <FieldLabel field={p.field} />
     {/* The real parser, so a participant gets the same precise diagnosis an
         organiser gets when setting a cover image (ADR-017). */}
+    {/* `config.purpose` is honoured so a photo slot rejects a folder or a Doc
+        in the input as well as in the validator — the two halves of the
+        registry have to agree, or the field explains one rule and enforces
+        another. */}
     <DriveLinkInput
       value={(p.value as string) ?? ''}
       onChange={p.onChange}
-      purpose="attachment"
+      purpose={p.field.config.purpose === 'image' ? 'image' : 'attachment'}
       placeholder={p.field.placeholder ?? 'Paste a Google Drive share link'}
     />
     <FieldFoot error={p.error} help={p.field.help} />

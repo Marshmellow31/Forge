@@ -2,7 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { demoOrgId } from './app';
 import { qk } from './keys';
 import * as sync from '@core/sync';
-import type { Registration, Submission } from '@shared/types/domain';
+import type { Registration, Submission, ParticipantStatus } from '@shared/types/domain';
+import type { RoleDefinition } from '@core/rbac';
 
 /**
  * Write hooks. Components use these; they never import `firebase/firestore`
@@ -341,6 +342,120 @@ export function useRevokeInvite(orgId = demoOrgId()) {
     mutationFn: ({ email, userId }: { email: string; userId: string | undefined }) =>
       sync.revokeInvite(orgId, email, userId),
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.invites(orgId) }),
+  });
+}
+
+export function useSetMemberAccess(orgId = demoOrgId()) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ memberId, roleIds, status, roles, userId }: {
+      memberId: string;
+      roleIds: string[];
+      status: 'active' | 'invited' | 'suspended';
+      roles: RoleDefinition[];
+      userId: string | undefined;
+    }) => sync.setMemberAccess(orgId, memberId, { roleIds, status }, roles, userId),
+    // Both keys: the roster changes, and so does the *acting* admin's own
+    // permission set if they just edited themselves — which is exactly the case
+    // where a stale cache is most confusing.
+    onSettled: (_d, _e, vars) => {
+      void qc.invalidateQueries({ queryKey: qk.members(orgId) });
+      void qc.invalidateQueries({ queryKey: qk.member(orgId, vars.memberId) });
+    },
+  });
+}
+
+export function useRemoveMember(orgId = demoOrgId()) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ memberId, userId }: { memberId: string; userId: string | undefined }) =>
+      sync.removeMember(orgId, memberId, userId),
+    onSettled: (_d, _e, vars) => {
+      void qc.invalidateQueries({ queryKey: qk.members(orgId) });
+      void qc.invalidateQueries({ queryKey: qk.member(orgId, vars.memberId) });
+    },
+  });
+}
+
+/* ================================================================== *
+ * Participant administration — ADR-025                                *
+ * ================================================================== */
+
+/**
+ * The three roster mutations share one invalidation: the console's own list,
+ * plus the per-challenge list the control room reads, because the same document
+ * is behind both and a stale control room after an admin action is a bug report
+ * waiting to happen.
+ */
+function useRosterInvalidation(orgId: string) {
+  const qc = useQueryClient();
+  return (challengeId: string) => {
+    // A prefix match: the roster key carries the challenge-id list, so an exact
+    // key is not knowable from here.
+    void qc.invalidateQueries({ queryKey: ['org', orgId, 'allRegistrations'] });
+    void qc.invalidateQueries({ queryKey: qk.registrations(orgId, challengeId) });
+    void qc.invalidateQueries({ queryKey: qk.challenges(orgId) });
+  };
+}
+
+export function useSetRegistrationStatus(orgId = demoOrgId()) {
+  const invalidate = useRosterInvalidation(orgId);
+  return useMutation({
+    mutationFn: ({ challengeId, registrationId, status, userId }: {
+      challengeId: string;
+      registrationId: string;
+      status: ParticipantStatus;
+      userId: string | undefined;
+    }) => sync.setRegistrationStatus(orgId, challengeId, registrationId, status, userId),
+    onSettled: (_d, _e, vars) => invalidate(vars.challengeId),
+  });
+}
+
+export function useSetRegistrationStage(orgId = demoOrgId()) {
+  const invalidate = useRosterInvalidation(orgId);
+  return useMutation({
+    mutationFn: ({ challengeId, registrationId, stageKey, userId }: {
+      challengeId: string;
+      registrationId: string;
+      stageKey: string;
+      userId: string | undefined;
+    }) => sync.setRegistrationStage(orgId, challengeId, registrationId, stageKey, userId),
+    onSettled: (_d, _e, vars) => invalidate(vars.challengeId),
+  });
+}
+
+/**
+ * Check-in from the admin roster.
+ *
+ * `useCheckIn` exists already and writes the same document, but it invalidates
+ * only `registrations(orgId, challengeId)` — the key the *control room* reads.
+ * Called from the console it wrote to Firestore and the roster never refetched,
+ * so the button did nothing visible while the database changed underneath it:
+ * the worst shape a bug can take on a screen whose whole job is to tell you the
+ * truth about the data. This shares the roster's invalidation instead.
+ */
+export function useRosterCheckIn(orgId = demoOrgId()) {
+  const invalidate = useRosterInvalidation(orgId);
+  return useMutation({
+    mutationFn: ({ challengeId, registrationId, present, userId }: {
+      challengeId: string;
+      registrationId: string;
+      present: boolean;
+      userId: string | undefined;
+    }) => sync.checkIn(orgId, challengeId, registrationId, present, userId),
+    onSettled: (_d, _e, vars) => invalidate(vars.challengeId),
+  });
+}
+
+export function useRemoveRegistration(orgId = demoOrgId()) {
+  const invalidate = useRosterInvalidation(orgId);
+  return useMutation({
+    mutationFn: ({ challengeId, registrationId, userId }: {
+      challengeId: string;
+      registrationId: string;
+      userId: string | undefined;
+    }) => sync.removeRegistration(orgId, challengeId, registrationId, userId),
+    onSettled: (_d, _e, vars) => invalidate(vars.challengeId),
   });
 }
 

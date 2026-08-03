@@ -9,8 +9,10 @@ import { DriveLinkInput } from '@shared/ui/DriveLinkInput';
 import { useChallengeBySlug, useFormSchemas, useSubmissions } from '@core/firebase/hooks';
 import { useSubmitEntry } from '@core/firebase/mutations';
 import { useAuth } from '@core/auth';
+import { demoOrgId } from '@core/firebase/app';
 import { NotSignedInError } from '@core/sync';
 import { FormRenderer, useFormEngine } from '@shared/ui/forms/FormRenderer';
+import { UploadProvider } from '@shared/ui/forms/UploadContext';
 import { stripHiddenAnswers } from '@core/forms/conditions';
 import { parseDriveLink, driveFileRef } from '@core/drive/links';
 import { EmptyState, Tag, ListSkeleton, containerSx } from '@shared/ui/primitives';
@@ -179,7 +181,19 @@ export default function SubmitScreen() {
         />
       </Box>
 
-      <FormRenderer schema={schema} engine={engine} />
+      {/* File fields upload into the organiser's Drive, and need to know
+          which challenge they are filing under and who is asking. The schema
+          cannot carry either — the same schema serves different challenges —
+          so it arrives as context. See shared/ui/forms/UploadContext.tsx. */}
+      <UploadProvider
+        value={{
+          orgId: demoOrgId(),
+          challengeId: challenge?.id ?? '',
+          getIdToken: () => (user ? user.getIdToken() : Promise.resolve(null)),
+        }}
+      >
+        <FormRenderer schema={schema} engine={engine} />
+      </UploadProvider>
 
       {error && (
         <Stack direction="row" gap={1.75} alignItems="flex-start" sx={{ mt: 4, p: 2.25, borderRadius: `${radius.tile}px`, background: c.errorContainer }}>

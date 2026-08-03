@@ -188,3 +188,35 @@ export interface AuditEntry {
   target: string;
   at: string;
 }
+
+/**
+ * One person's entry into one challenge, as the admin console sees it.
+ *
+ * Distinct from `Registration` for one reason that matters: `Registration`
+ * collapses `withdrawn` and `disqualified` into `eliminated`, because a
+ * participant looking at their own entry does not need that distinction and the
+ * kinder word is the right one. An administrator is the person who *sets* those
+ * statuses, so a screen that cannot tell them apart cannot manage them.
+ *
+ * It also carries the challenge it belongs to by title, because the console
+ * lists every registration in the organization at once and "which competition
+ * is this" is otherwise unanswerable from the row.
+ */
+export interface ParticipantEntry {
+  id: string;
+  challengeId: string;
+  challengeTitle: string;
+  userId: string;
+  name: string;
+  email: string;
+  avatarColor: string;
+  status: 'pending' | 'active' | 'withdrawn' | 'disqualified' | 'eliminated' | 'winner';
+  currentStageKey: string;
+  teamName: string | null;
+  registeredAt: string;
+  checkedIn: boolean;
+  answers: Record<string, unknown>;
+}
+
+/** The statuses an administrator may move a registration between. */
+export type ParticipantStatus = ParticipantEntry['status'];
