@@ -81,6 +81,11 @@ beforeEach(async () => {
       userId: 'u_member', status: 'active', roleIds: ['viewer'], resolvedPermissions: ['org.read'],
     });
 
+    await setDoc(doc(db, 'organizations', ORG, 'members', 'u_admin'), {
+      userId: 'u_admin', status: 'active', roleIds: ['admin'],
+      resolvedPermissions: ['member.read', 'member.invite', 'member.manage', 'role.manage', 'challenge.update'],
+    });
+
     // A suspended member — active membership is not the same as existing.
     await setDoc(doc(db, 'organizations', ORG, 'members', 'u_suspended'), {
       userId: 'u_suspended', status: 'suspended', roleIds: ['organizer'],
@@ -264,6 +269,11 @@ describe('registrations', () => {
   it('denies registering as somebody else', async () => {
     const db = asUser('u_member');
     await assertFails(setDoc(doc(db, ...regPath('u_someone_else')), { userId: 'u_someone_else', status: 'pending' }));
+  });
+
+  it('denies an administrator registering for a competition', async () => {
+    const db = asUser('u_admin');
+    await assertFails(setDoc(doc(db, ...regPath('u_admin')), { userId: 'u_admin', status: 'pending' }));
   });
 
   it('denies a userId that disagrees with the document id', async () => {

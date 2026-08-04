@@ -161,16 +161,18 @@ export default function Members() {
             value={roleId}
             onChange={(e) => setRoleId(e.target.value)}
           >
-            {BUILT_IN_ROLE_LIST.map((role) => (
-              <MenuItem key={role.id} value={role.id}>
+            {BUILT_IN_ROLE_LIST
+              .filter((role) => can('role.manage') || !['owner', 'admin'].includes(role.id))
+              .map((role) => (
+                <MenuItem key={role.id} value={role.id}>
                 <Box>
                   <Typography sx={{ fontSize: 14, fontWeight: 600 }}>{role.name}</Typography>
                   <Typography sx={{ fontSize: 12, color: c.inkMuted, whiteSpace: 'normal' }}>
                     {role.description}
                   </Typography>
                 </Box>
-              </MenuItem>
-            ))}
+                </MenuItem>
+              ))}
           </TextField>
 
           {invite.error && (

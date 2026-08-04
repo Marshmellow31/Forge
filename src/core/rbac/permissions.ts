@@ -41,6 +41,13 @@ const ALL = [...PERMISSIONS] as Permission[];
 export type BuiltInRoleId =
   | 'owner' | 'admin' | 'organizer' | 'judge' | 'reviewer' | 'volunteer' | 'viewer';
 
+/** Administrative accounts manage competitions; they do not enter them. */
+export const ADMINISTRATIVE_ROLE_IDS = ['owner', 'admin'] as const;
+
+export function isAdministrativeRole(roleId: string): boolean {
+  return (ADMINISTRATIVE_ROLE_IDS as readonly string[]).includes(roleId);
+}
+
 export interface RoleDefinition {
   id: string;
   name: string;

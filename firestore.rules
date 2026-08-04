@@ -27,6 +27,16 @@ service cloud.firestore {
       return isMember(orgId) && perm in get(memberPath(orgId)).data.resolvedPermissions;
     }
 
+    // Administrative accounts manage competitions; they do not participate.
+    function isAdminAccount(orgId) {
+      return isMember(orgId)
+        && get(memberPath(orgId)).data.roleIds.hasAny(['owner', 'admin']);
+    }
+
+    function requestsAdminRole() {
+      return request.resource.data.roleIds.hasAny(['owner', 'admin']);
+    }
+
     // ---- Invite redemption (SPEC_RBAC §3, Phase 1.3) ---------------------
     // How the first admin exists without a Cloud Function.
     //
@@ -177,6 +187,7 @@ service cloud.firestore {
         //      It grants nothing elsewhere: `ownerId` is set once, at creation,
         //      by a rule that requires it to equal the caller.
         allow create: if hasPerm(orgId, 'member.manage')
+                      && (!requestsAdminRole() || hasPerm(orgId, 'role.manage'))
                       || (memberId == uid()
                           && hasPendingInvite(orgId)
                           && claimsExactlyTheInvite(orgId))
@@ -188,6 +199,7 @@ service cloud.firestore {
         // never touch roleIds, resolvedPermissions or status — that is the
         // whole privilege boundary, and `hasOnly` is what pins it shut.
         allow update: if hasPerm(orgId, 'member.manage')
+                      && (!requestsAdminRole() || hasPerm(orgId, 'role.manage'))
                       || (memberId == uid()
                           && onlyChanges(['displayName', 'photoURL', 'updatedAt']));
 
@@ -223,7 +235,8 @@ service cloud.firestore {
         allow read: if hasPerm(orgId, 'member.read')
                     || (isSignedIn() && request.auth.token.email != null
                         && email == request.auth.token.email.lower());
-        allow create: if hasPerm(orgId, 'member.invite');
+        allow create: if hasPerm(orgId, 'member.invite')
+                      && (!requestsAdminRole() || hasPerm(orgId, 'role.manage'));
         // An admin may re-issue or revoke; an invitee may only mark their own
         // invite accepted, and may not alter the roles it carries.
         allow update: if hasPerm(orgId, 'member.manage')
@@ -338,7 +351,9 @@ service cloud.firestore {
           // Your own, or someone who may read the roster. Never public: a
           // registration carries a name, an email address and the answers.
           allow read:   if rid == uid() || hasPerm(orgId, 'registration.read');
-          allow create: if rid == uid() && request.resource.data.userId == uid();
+          allow create: if rid == uid()
+                        && request.resource.data.userId == uid()
+                        && !isAdminAccount(orgId);
           // Three update paths:
           //   1. you may edit your own registration while it is still pending;
           //   2. `registration.manage` may edit anything;
@@ -360,7 +375,9 @@ service cloud.firestore {
         match /submissions/{sid} {
           allow read:   if resource.data.userId == uid()
                         || hasPerm(orgId, 'submission.read');
-          allow create: if request.resource.data.userId == uid();
+          allow create: if request.resource.data.userId == uid()
+                        && !isAdminAccount(orgId)
+                        && exists(/databases/$(database)/documents/organizations/$(orgId)/challenges/$(cid)/registrations/$(uid()));
           // Once submitted it is frozen; only a draft is editable by its owner.
           allow update: if resource.data.userId == uid() && resource.data.status == 'draft';
           allow delete: if false;

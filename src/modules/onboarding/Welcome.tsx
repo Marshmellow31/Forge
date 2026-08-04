@@ -1,237 +1,153 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Box, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import { Icon } from '@shared/ui/Icon';
-import { Blobs } from '@shared/ui/primitives';
-import { useAuth } from '@core/auth';
-import { HOME_FOR, type AppMode } from '@core/auth/mode';
-import { c, radius, shadow, ease } from '@shared/design/tokens';
+import { useAuth, usePermissions } from '@core/auth';
+import { type AppMode } from '@core/auth/mode';
+import { c, ease, radius, shadow } from '@shared/design/tokens';
 
-/**
- * S-00 — The front door.
- *
- * Three doors, because Forge serves three arrivals with genuinely different
- * needs, and a single "Sign in" button serves none of them well:
- *
- *   • **Participant** — wants to enter a challenge. Needs an account (a
- *     submission has to be attributable) but nothing else.
- *   • **Organizer** — wants to run one. Needs an account *and* an organization,
- *     and if they have neither the honest next step is "create one", not a
- *     permission-denied screen.
- *   • **Have a look** — wants to judge the product before committing. Needs no
- *     account at all, and asking for one here loses them.
- *
- * The choice sets which *surface* you see, never what you may do. Permissions
- * come from `core/rbac` and are enforced by security rules — picking
- * "organizer" shows you the organizing screens and an empty state, it does not
- * make you one. That distinction is why this screen can be this permissive.
- */
-
-interface Door {
+interface StartPath {
   mode: AppMode;
   icon: string;
   title: string;
   body: string;
-  cta: string;
-  /** Whether choosing this door requires an account. */
+  destination: string;
+  steps: string[];
   needsAccount: boolean;
-  accent: string;
 }
 
-const DOORS: Door[] = [
+const START_PATHS: StartPath[] = [
   {
     mode: 'participant',
     icon: 'emoji_events',
-    title: 'I want to enter challenges',
-    body: 'Register, submit your work, track deadlines and see your results. Your entries and certificates stay with your account.',
-    cta: 'Sign in to continue',
+    title: 'I want to enter competitions',
+    body: 'Browse what is live, register once and keep every entry, deadline and result together.',
+    destination: '/discover',
+    steps: ['Discover', 'Register', 'Submit', 'Track results'],
     needsAccount: true,
-    accent: c.primaryContainer,
   },
   {
     mode: 'organizer',
-    icon: 'workspaces',
-    title: 'I want to run challenges',
-    body: 'Create a competition, frame the questions and requirements, invite judges, score entries and publish results.',
-    cta: 'Sign in to continue',
+    icon: 'space_dashboard',
+    title: 'I help run competitions',
+    body: 'Open your organization workspace to manage challenges, participants, judging and results.',
+    destination: '/org',
+    steps: ['Create', 'Publish', 'Review', 'Reward'],
     needsAccount: true,
-    accent: c.success,
-  },
-  {
-    mode: 'demo',
-    icon: 'visibility',
-    title: 'Just show me around',
-    // Deliberately does not count the challenges. The seeded demo set was
-    // removed (ADR-025) and a number here is a promise the database has to keep
-    // — it was already wrong the moment the first one was published or deleted.
-    body: 'Browse the open challenges, the entries and the judging, with no account and nothing to set up. Read-only.',
-    cta: 'Explore the demo',
-    needsAccount: false,
-    accent: c.surfaceContainer,
   },
 ];
 
+/** One intent decision, with a visual preview of what happens next. */
 export default function Welcome() {
   const nav = useNavigate();
-  const { user, setMode, busy, error } = useAuth();
-  const [pending, setPending] = useState<AppMode | null>(null);
+  const { user, busy, setMode } = useAuth();
+  const { isAdmin, ready: permissionsReady } = usePermissions();
+  const [selected, setSelected] = useState<AppMode>('participant');
+  const [pending, setPending] = useState<AppMode | 'admin' | null>(null);
+  const chosen = START_PATHS.find((path) => path.mode === selected) ?? START_PATHS[0];
 
-  const choose = (door: Door) => {
-    setPending(door.mode);
-    try {
-      // The surface is recorded *before* signing in, not after: it is what the
-      // door is actually choosing, and if someone abandons the sign-in form and
-      // comes back later, the answer they already gave should still hold.
-      setMode(door.mode);
-
-      // Already signed in? Then the door is only a view preference and there is
-      // no reason to make them authenticate again.
-      if (door.needsAccount && !user) {
-        // `next` carries them past sign-in to the surface they picked, so
-        // choosing a door is one decision rather than two.
-        nav(`/signin?next=${encodeURIComponent(HOME_FOR[door.mode])}`);
-        return;
-      }
-      nav(HOME_FOR[door.mode]);
-    } finally {
-      setPending(null);
+  const continueWith = (path: StartPath) => {
+    setPending(path.mode);
+    setMode(path.mode);
+    if (!user && path.needsAccount) {
+      nav(`/signin?next=${encodeURIComponent(path.destination)}`);
+      return;
     }
+    nav(path.destination);
+  };
+
+  const explore = () => {
+    setMode('demo');
+    nav('/discover');
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', background: c.surface, color: c.ink, px: { xs: 2.5, md: 5 }, py: { xs: 4, md: 7 } }}>
-      <Box sx={{ maxWidth: 1000, mx: 'auto' }}>
-        <Stack direction="row" alignItems="center" gap={1.5} sx={{ mb: { xs: 4, md: 6 } }}>
-          <Box
-            sx={{
-              width: 40, height: 40, borderRadius: '13px', background: c.inverse,
-              color: c.primary, display: 'grid', placeItems: 'center',
-              fontSize: 21, fontWeight: 800, letterSpacing: '-.02em',
-            }}
-          >
-            F
-          </Box>
-          <Typography sx={{ fontSize: 24, fontWeight: 700, letterSpacing: '-.02em' }}>Forge</Typography>
+    <Box sx={{ minHeight: '100vh', px: { xs: 2, sm: 3, md: 5 }, py: { xs: 2, md: 4 }, background: c.surface, color: c.ink }}>
+      <Box sx={{ maxWidth: 1080, mx: 'auto' }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: { xs: 3, md: 5 } }}>
+          <Brand />
+          <Button component={Link} to={user ? '/discover' : '/signin'} variant="text">{user ? 'Skip for now' : 'I already have an account'}</Button>
         </Stack>
 
-        <Box
-          sx={{
-            position: 'relative', overflow: 'hidden', mb: { xs: 4, md: 5 },
-            borderRadius: `${radius.hero}px`, background: c.primaryContainer,
-            p: { xs: '32px 24px', md: '48px 44px' },
-          }}
-        >
-          <Blobs variant="hero" />
-          <Box sx={{ position: 'relative', maxWidth: 640 }}>
-            <Typography sx={{ fontSize: 'clamp(30px, 4.2vw, 46px)', fontWeight: 700, letterSpacing: '-.03em', lineHeight: 1.1, mb: 1.5 }}>
-              How do you want to use Forge?
+        <Box sx={{ display: 'grid', gap: { xs: 3, lg: 4 }, gridTemplateColumns: { xs: '1fr', lg: 'minmax(0,.9fr) minmax(420px,1.1fr)' }, alignItems: 'stretch' }}>
+          <Box sx={{ p: { xs: 3, sm: 4, md: 5 }, borderRadius: `${radius.hero}px`, background: c.primaryContainer }}>
+            <Typography sx={{ fontSize: 12, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: c.primaryInk, mb: 2 }}>One quick choice</Typography>
+            <Typography component="h1" sx={{ maxWidth: 520, fontSize: 'clamp(34px,4.8vw,52px)', fontWeight: 760, lineHeight: 1.04, letterSpacing: '-.05em', mb: 2 }}>
+              How will you use Forge today?
             </Typography>
-            <Typography sx={{ fontSize: 17, color: c.inkMuted, lineHeight: 1.6 }}>
-              You can change this at any time, and it does not lock anything away — the same
-              account can enter a challenge on Monday and run one on Tuesday.
+            <Typography sx={{ maxWidth: 520, fontSize: 15.5, lineHeight: 1.65, color: c.inkMuted, mb: 4 }}>
+              This only arranges your workspace. It never grants an admin role—organization access still comes from an existing administrator.
             </Typography>
+
+            <Stack gap={1.5}>
+              {START_PATHS.map((path) => {
+                const active = selected === path.mode;
+                return (
+                  <Box key={path.mode} component="button" type="button" onClick={() => setSelected(path.mode)} aria-pressed={active} sx={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 1.75, p: 2.25, borderRadius: `${radius.tile}px`, border: `1px solid ${active ? c.outlineStrong : 'transparent'}`, background: active ? c.surfaceCard : 'rgba(255,253,246,.5)', color: c.ink, textAlign: 'left', font: 'inherit', cursor: 'pointer', boxShadow: active ? shadow.raised : 'none', transition: `all 180ms ${ease}` }}>
+                    <Box sx={{ width: 44, height: 44, flex: 'none', display: 'grid', placeItems: 'center', borderRadius: '14px', background: active ? c.primary : c.surfaceContainer }}><Icon name={path.icon} size={23} color={c.primaryIcon} /></Box>
+                    <Box sx={{ flex: 1 }}><Typography sx={{ fontSize: 16, fontWeight: 750, mb: 0.5 }}>{path.title}</Typography><Typography sx={{ fontSize: 13, lineHeight: 1.55, color: c.inkMuted }}>{path.body}</Typography></Box>
+                    <Icon name={active ? 'check_circle' : 'radio_button_unchecked'} size={22} fill={active} color={active ? c.successInk : c.inkFaint} />
+                  </Box>
+                );
+              })}
+            </Stack>
+
+            <Button fullWidth variant="contained" disabled={busy} onClick={() => continueWith(chosen)} sx={{ height: 54, mt: 3 }} endIcon={pending === chosen.mode ? <CircularProgress size={17} sx={{ color: c.onPrimary }} /> : <Icon name="arrow_forward" size={19} />}>
+              {user ? `Open ${chosen.mode === 'participant' ? 'competition discovery' : 'organization workspace'}` : 'Continue to account sign in'}
+            </Button>
+            <Button fullWidth variant="text" onClick={explore} sx={{ mt: 1 }}>Explore without an account</Button>
           </Box>
+
+          <JourneyPreview path={chosen} />
         </Box>
 
-        {user && (
-          <Stack
-            direction="row"
-            alignItems="center"
-            gap={1.5}
-            sx={{ mb: 3, p: 2, borderRadius: `${radius.tile}px`, background: c.surfaceContainer }}
-          >
-            <Icon name="account_circle" size={22} color={c.primaryIcon} />
-            <Typography sx={{ fontSize: 14, color: c.inkMuted }}>
-              Signed in as <b>{user.displayName ?? user.email ?? 'your account'}</b> — pick a
-              surface below.
-            </Typography>
-          </Stack>
-        )}
-
-        {error && (
-          <Stack
-            direction="row"
-            gap={1.5}
-            sx={{ mb: 3, p: 2.25, borderRadius: `${radius.tile}px`, background: c.errorContainer }}
-          >
-            <Icon name="error" size={22} color={c.errorInk} />
-            <Typography sx={{ fontSize: 13.5, color: c.errorBody, lineHeight: 1.6 }}>{error}</Typography>
-          </Stack>
-        )}
-
-        <Box sx={{ display: 'grid', gap: 2.5, gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' } }}>
-          {DOORS.map((door) => {
-            const isPending = pending === door.mode;
-            return (
-              <Box
-                key={door.mode}
-                component="button"
-                onClick={() => choose(door)}
-                disabled={busy}
-                sx={{
-                  textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit',
-                  display: 'flex', flexDirection: 'column',
-                  p: 3, border: `1px solid ${c.outline}`, borderRadius: `${radius.card}px`,
-                  background: c.surfaceCard,
-                  transition: `transform 220ms ${ease}, box-shadow 220ms ${ease}`,
-                  '&:hover:not(:disabled)': { transform: 'translateY(-4px)', boxShadow: shadow.card },
-                  '&:disabled': { opacity: 0.6, cursor: 'default' },
-                }}
-              >
-                <Box
-                  sx={{
-                    width: 52, height: 52, borderRadius: '16px', mb: 2.5,
-                    background: door.accent, display: 'grid', placeItems: 'center',
-                  }}
-                >
-                  <Icon name={door.icon} size={26} fill color={c.onPrimaryContainer} />
-                </Box>
-
-                <Typography sx={{ fontSize: 19, fontWeight: 700, letterSpacing: '-.015em', mb: 1, lineHeight: 1.3 }}>
-                  {door.title}
-                </Typography>
-                <Typography sx={{ fontSize: 14, color: c.inkMuted, lineHeight: 1.6, flex: 1, mb: 2.5 }}>
-                  {door.body}
-                </Typography>
-
-                <Stack direction="row" alignItems="center" gap={1} sx={{ fontSize: 14, fontWeight: 700, color: c.primaryInk }}>
-                  {isPending
-                    ? <CircularProgress size={16} sx={{ color: c.primaryInk }} />
-                    : <Icon name={door.needsAccount ? 'login' : 'arrow_forward'} size={18} />}
-                  {isPending ? 'Just a moment…' : (user && door.needsAccount ? 'Continue' : door.cta)}
-                </Stack>
-
-                {!door.needsAccount && (
-                  <Typography sx={{ fontSize: 12, color: c.inkFaint, mt: 1 }}>
-                    No account needed
-                  </Typography>
-                )}
-              </Box>
-            );
-          })}
-        </Box>
-
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          alignItems={{ sm: 'center' }}
-          gap={1.5}
-          sx={{ mt: 4, p: 2.5, borderRadius: `${radius.tile}px`, background: c.surfaceContainer }}
-        >
-          <Icon name="info" size={22} color={c.primaryIcon} />
-          <Typography sx={{ fontSize: 13.5, color: c.inkMuted, lineHeight: 1.6, flex: 1 }}>
-            <b>New to organizing?</b> Choosing “run challenges” on a fresh account shows you the
-            organizing screens with nothing in them yet — the next step is creating an
-            organization, which makes you its owner.
+        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} gap={1.5} sx={{ mt: 3, p: 2.25, borderRadius: `${radius.card}px`, background: c.surfaceContainer }}>
+          <Icon name="verified_user" size={23} color={c.primaryIcon} />
+          <Typography sx={{ flex: 1, fontSize: 13.5, lineHeight: 1.55, color: c.inkMuted }}>
+            One account follows you across entries and invitations. Admin accounts manage competitions but cannot enter them.
           </Typography>
-          <Button
-            variant="outlined"
-            onClick={() => { setMode('organizer'); nav('/org/new'); }}
-            sx={{ flex: 'none' }}
-          >
-            Create an organization
-          </Button>
+          {permissionsReady && isAdmin && (
+            <Button variant="outlined" disabled={busy} onClick={() => { setPending('admin'); setMode('organizer'); nav('/admin'); }} endIcon={pending === 'admin' ? <CircularProgress size={16} /> : <Icon name="arrow_forward" size={18} />}>
+              Open admin workspace
+            </Button>
+          )}
         </Stack>
       </Box>
     </Box>
+  );
+}
+
+function JourneyPreview({ path }: { path: StartPath }) {
+  const participant = path.mode === 'participant';
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', p: { xs: 3, sm: 4, md: 5 }, borderRadius: `${radius.hero}px`, background: participant ? c.surfaceCard : c.inverse, color: participant ? c.ink : c.onInverse, border: participant ? `1px solid ${c.outline}` : 'none', transition: `background 220ms ${ease}, color 220ms ${ease}` }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 4 }}>
+        <Box><Typography sx={{ fontSize: 12, color: participant ? c.inkFaint : c.primary }}>Your next steps</Typography><Typography sx={{ mt: 0.4, fontSize: 19, fontWeight: 750 }}>{participant ? 'From finding a competition to seeing your result' : 'From setup to published results'}</Typography></Box>
+        <Box sx={{ width: 44, height: 44, display: 'grid', placeItems: 'center', borderRadius: '14px', background: participant ? c.primaryContainer : 'rgba(255,241,185,.14)' }}><Icon name={participant ? 'route' : 'monitoring'} size={24} color={participant ? c.primaryIcon : c.primary} /></Box>
+      </Stack>
+
+      <Stack gap={1.5} sx={{ flex: 1 }}>
+        {path.steps.map((step, index) => (
+          <Stack key={step} direction="row" alignItems="center" gap={1.5} sx={{ position: 'relative', p: 1.75, borderRadius: `${radius.tile}px`, background: participant ? (index === 0 ? c.primaryContainer : c.surfaceContainer) : 'rgba(255,255,255,.07)' }}>
+            <Box sx={{ width: 34, height: 34, flex: 'none', display: 'grid', placeItems: 'center', borderRadius: '11px', background: participant ? c.surfaceCard : 'rgba(255,241,185,.14)', color: participant ? c.primaryInk : c.primary, fontSize: 12, fontWeight: 800 }}>{index + 1}</Box>
+            <Typography sx={{ flex: 1, fontSize: 14, fontWeight: 700 }}>{step}</Typography>
+            <Icon name={index === path.steps.length - 1 ? 'flag' : 'arrow_downward'} size={18} color={participant ? c.inkFaint : c.primary} />
+          </Stack>
+        ))}
+      </Stack>
+
+      <Box sx={{ mt: 3, p: 2, borderRadius: `${radius.tile}px`, background: participant ? c.success : 'rgba(205,227,203,.12)' }}>
+        <Stack direction="row" alignItems="center" gap={1.25}><Icon name="notifications_active" size={21} color={participant ? c.successInk : c.primary} /><Typography sx={{ fontSize: 13, lineHeight: 1.5 }}>{participant ? 'Deadlines and result updates stay with your account.' : 'Live counts show what needs attention next.'}</Typography></Stack>
+      </Box>
+    </Box>
+  );
+}
+
+function Brand() {
+  return (
+    <Stack component={Link} to="/" direction="row" alignItems="center" gap={1.25} sx={{ color: 'inherit', textDecoration: 'none' }}>
+      <Box sx={{ width: 40, height: 40, display: 'grid', placeItems: 'center', borderRadius: '13px', background: c.inverse, color: c.primary, fontSize: 21, fontWeight: 800 }}>F</Box>
+      <Typography sx={{ fontSize: 23, fontWeight: 750, letterSpacing: '-.03em' }}>Forge</Typography>
+    </Stack>
   );
 }

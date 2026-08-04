@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { useMember, useRoles } from '@core/firebase/hooks';
-import { resolvePermissions, can as canFn, type Permission, type Scope } from '@core/rbac';
+import { isAdministrativeRole, resolvePermissions, can as canFn, type Permission, type Scope } from '@core/rbac';
 
 /**
  * The signed-in user's permissions at a scope, resolved by the pure engine.
@@ -41,6 +41,7 @@ export function usePermissions(scope: Scope = DEFAULT_SCOPE) {
        *  a permission should wait for this rather than flashing a denied state. */
       ready: ready && !memberLoading && !rolesLoading,
       isMember: Boolean(member),
+      isAdmin: Boolean(member?.roleIds.some(isAdministrativeRole)),
       isSignedIn: Boolean(user),
     }),
     [permissions, ready, memberLoading, rolesLoading, member, user],

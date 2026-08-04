@@ -6,15 +6,43 @@
 
 ---
 
-**Last updated:** 2026-08-01
-**Updated by:** Agent (Google + guest sign-in restored, participant console, demo-data curation)
+**Last updated:** 2026-08-04
+**Updated by:** Agent (administrative participation and role-assignment hardening)
 **Current phase:** **Phases 0, 1 and 2 complete.** Phase 3 is blocked on Blaze, not effort
 **Repo state:** 18 screens on live Firestore (project forge-4d40a, org_demo seeded); the app now **writes**
 **Build health:** typecheck clean · lint clean (0 errors, 0 warnings) ·
-**421 unit tests + 92 security-rules tests, all passing** · production build
+**422 unit tests + 92 security-rules tests, all passing** · production build
 clean, service worker generated · no route renders `NotBuiltYet` any more
 **Rules + indexes are DEPLOYED to `forge-4d40a`** (2026-07-29) and reads were
 re-verified against them afterwards.
+
+**Access-control hardening (2026-08-04).** Owner/admin memberships can manage
+competitions but cannot create registrations or submissions for themselves;
+the client shows the same boundary on the registration screen. Only a member
+with `role.manage` may invite or assign the built-in `owner`/`admin` roles, so
+ordinary customer accounts cannot self-promote or create admin accounts. The
+existing member roster remains visible to admins through `member.read`.
+
+**Verification note:** typecheck, lint, 422 unit tests, and the production build
+are clean. The Firestore rules suite was attempted but the local emulator
+exited before tests started because the active Java runtime is below the
+required version; use Android Studio JDK 21 from the existing setup note above.
+
+**Login and onboarding redesign (2026-08-04).** `/signin` is now one customer
+account flow: email/password and Google remain, but the member/admin split and
+browser-visible admin-key field are gone. Organization roles are assigned by an
+administrator and described plainly in the UI. `/welcome` now asks for intent
+(enter, manage, or explore) rather than role; signed-in admins get a direct
+workspace action after their membership resolves.
+
+**Public onboarding workflow refresh (2026-08-04).** `/` now puts live and
+published public competitions in the opening viewport and repeats up to four in
+the first content section, with loading/error/empty states. The old technical
+feature catalogue was replaced by lightweight CSS previews of the participant
+journey and organizer control room. `/welcome` is one intent decision with a
+live journey preview, while `/signin` is a compact centered customer form. No
+new image payloads or queries were added: the landing page still uses the one
+cached challenge query, capped card rendering, and lazy cover images.
 
 ---
 

@@ -43,19 +43,6 @@ export interface AuthValue {
   signInGoogle: () => Promise<boolean>;
   /** Anonymous session. Temporary scaffolding — see `core/firebase/auth.ts`. */
   signInGuest: () => Promise<boolean>;
-  /**
-   * The admin door: email, password **and** the access key, in one step.
-   *
-   * It exists as one call rather than "sign in, then unlock" because the two
-   * halves have to be atomic from the screen's point of view — signing someone
-   * in and *then* refusing their key would leave them authenticated on a
-   * screen that says they failed, with no obvious way forward. The key is
-   * checked first, so a wrong key never touches Firebase at all.
-   *
-   * The unlock is recorded against the uid this call returns rather than the
-   * `user` in state, which has not landed yet when this resolves.
-   */
-  signInAdmin: (email: string, password: string, key: string) => Promise<boolean>;
   resetPassword: (email: string) => Promise<boolean>;
   resendVerificationEmail: () => Promise<boolean>;
   signOutNow: () => Promise<void>;
@@ -94,7 +81,6 @@ const AuthContext = createContext<AuthValue>({
   signUpEmail: async () => false,
   signInGoogle: async () => false,
   signInGuest: async () => false,
-  signInAdmin: async () => false,
   resetPassword: async () => false,
   resendVerificationEmail: async () => false,
   signOutNow: async () => {},
@@ -263,38 +249,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         run(() => signUpWithEmail(email, password, displayName)),
       signInGoogle: () => run(signInWithGoogle),
       signInGuest: () => run(signInAsGuest),
-
-      signInAdmin: async (email, password, key) => {
-        // The key first, and without a network call: a wrong key is the most
-        // likely mistake at this door, and it is not worth a round trip or a
-        // rate-limit entry against the address.
-        if (!verifyAdminKey(key)) {
-          setError('That access key is not right.');
-          setNotice(null);
-          return false;
-        }
-        setBusy(true);
-        setError(null);
-        setNotice(null);
-        try {
-          const signedIn = await signInWithEmail(email, password);
-          // Bind the unlock to the uid we were just handed. Reading `user` from
-          // state here would read the *previous* identity — `onAuth` has not
-          // fired yet — and record an unlock against the wrong account.
-          recordUnlock(signedIn.uid);
-          setAdminUnlocked(true);
-          // Same reason as in `run`: this path does not go through it, and the
-          // admin door is precisely where a stale "not a member" is worst.
-          await qc.invalidateQueries({ queryKey: ['org', demoOrgId(), 'member'] });
-          await qc.invalidateQueries({ queryKey: ['user'] });
-          return true;
-        } catch (err) {
-          setError(explain(err));
-          return false;
-        } finally {
-          setBusy(false);
-        }
-      },
 
       // Worded as a conditional on purpose: Firebase succeeds for an unknown
       // address too, and saying "sent" would be a claim we cannot support.

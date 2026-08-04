@@ -7,7 +7,7 @@ import {
 import { Icon } from '@shared/ui/Icon';
 import { useChallengeBySlug, useFormSchemas } from '@core/firebase/hooks';
 import { useSubmitRegistration } from '@core/firebase/mutations';
-import { useAuth } from '@core/auth';
+import { useAuth, usePermissions } from '@core/auth';
 import { demoOrgId } from '@core/firebase/app';
 import { NotSignedInError } from '@core/sync';
 import { FormRenderer, useFormEngine } from '@shared/ui/forms/FormRenderer';
@@ -24,6 +24,7 @@ export default function RegisterScreen() {
   const schema = challenge ? schemas[challenge.formSchemaId] : undefined;
   const [done, setDone] = useState(false);
   const { user } = useAuth();
+  const { isAdmin, ready: permissionsReady } = usePermissions();
   const submitMutation = useSubmitRegistration(challenge?.id);
 
   // Hooks must run unconditionally — fall back to an empty schema when missing.
@@ -33,6 +34,15 @@ export default function RegisterScreen() {
 
   if (isLoading) return <ListSkeleton rows={3} height={90} />;
   if (!challenge || !schema) return <EmptyState icon="search_off" title="Form not found" />;
+  if (permissionsReady && isAdmin) {
+    return (
+      <EmptyState
+        icon="admin_panel_settings"
+        title="Admins cannot enter competitions"
+        body="Admin accounts manage competitions and participants. Use a separate customer account to enter this competition."
+      />
+    );
+  }
 
   const stored = stripHiddenAnswers(schema, engine.answers);
 

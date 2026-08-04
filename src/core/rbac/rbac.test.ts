@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  PERMISSIONS, BUILT_IN_ROLES, BUILT_IN_ROLE_LIST, isPermission,
+  PERMISSIONS, BUILT_IN_ROLES, BUILT_IN_ROLE_LIST, isPermission, isAdministrativeRole,
   resolvePermissions, resolvedPermissionsFor, can, canAny, canAll,
   type MemberLike, type Permission, type RoleDefinition,
 } from './index';
@@ -28,6 +28,12 @@ describe('permission catalog', () => {
 });
 
 describe('built-in roles', () => {
+  it('classifies only owner and admin as administrative accounts', () => {
+    expect(isAdministrativeRole('owner')).toBe(true);
+    expect(isAdministrativeRole('admin')).toBe(true);
+    expect(isAdministrativeRole('organizer')).toBe(false);
+    expect(isAdministrativeRole('viewer')).toBe(false);
+  });
   it('gives Owner every permission in the catalog', () => {
     expect(new Set(BUILT_IN_ROLES.owner.permissions)).toEqual(new Set(PERMISSIONS));
   });

@@ -1,5 +1,6 @@
 export {
-  PERMISSIONS, BUILT_IN_ROLES, BUILT_IN_ROLE_LIST, isPermission,
+  PERMISSIONS, BUILT_IN_ROLES, BUILT_IN_ROLE_LIST, isPermission, isAdministrativeRole,
+  ADMINISTRATIVE_ROLE_IDS,
   type Permission, type BuiltInRoleId, type RoleDefinition,
 } from './permissions';
 export {
